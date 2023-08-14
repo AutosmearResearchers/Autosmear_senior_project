@@ -2,9 +2,9 @@
 #run this script in Maya Script Editor after putting the .py file in the maya scripts folder
 
 import importlib
-import demo_stretch_ui
-importlib.reload(demo_stretch_ui)
-demo_stretch_ui.run()
+import demo_stretchimg_ui
+importlib.reload(demo_stretching_ui)
+demo_stretching_ui.run()
 """
 
 from PySide2.QtCore import *
