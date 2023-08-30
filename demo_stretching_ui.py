@@ -11,8 +11,12 @@ from PySide2.QtCore import *
 from PySide2.QtWidgets import *
 from PySide2.QtGui import *
 from shiboken2 import wrapInstance
+from importlib import reload
 import maya.OpenMayaUI as omui
 import maya.cmds as cmds
+
+import stretchAutosmear
+reload(stretchAutosmear)
 
 class MainWidget(QDialog):
     """
@@ -56,52 +60,16 @@ class StretchingWidget(QDialog):
         self.spacer = QSpacerItem(20, 40, QSizePolicy.Minimum, QSizePolicy.Expanding)
         self.horizontal_spacer = QSpacerItem(20, 40, QSizePolicy.Expanding)
 
-        # ----------- START/END FRAME WIDGET ------------ #
-        self.keyframe_confining_widget = QWidget()
-        self.keyframe_confining_layout = QVBoxLayout()
-        self.keyframe_confining_widget.setLayout(self.keyframe_confining_layout)
-
-        self.keyframe_confining_layout.setContentsMargins(0, 0, 0, 0)
-        self.keyframe_confining_layout.setSpacing(1)
-
-        self.start_frame_layout = QHBoxLayout()
-        self.start_frame_label = QLabel("Start Frame:")
-        self.start_frame_lineEdit = QSpinBox()
-        self.start_frame_lineEdit.setMaximum(100000)
-
-        self.start_frame_layout.addWidget(self.start_frame_label)
-        self.start_frame_layout.addWidget(self.start_frame_lineEdit)
-        self.start_frame_layout.addItem(self.horizontal_spacer)
-
-        self.end_frame_layout = QHBoxLayout()
-        self.end_frame_label = QLabel("End Frame: ")
-        self.end_frame_lineEdit = QSpinBox()
-        self.end_frame_lineEdit.setMaximum(100000)
-
-        self.end_frame_layout.addWidget(self.end_frame_label)
-        self.end_frame_layout.addWidget(self.end_frame_lineEdit)
-        self.end_frame_layout.addItem(self.horizontal_spacer)
-
-        self.keyframe_confining_layout.addLayout(self.start_frame_layout)
-        self.keyframe_confining_layout.addLayout(self.end_frame_layout)
-
         # ----------- ATTRIBUTE BASED SUB-WIDGET ------------ #
+        self.selected_jnt_ctrl_layout = GetInputLayout(label="Selected controller:")
+
         self.selected_jnt_widget = QWidget()
         self.selected_jnt_vertical_layout = QVBoxLayout()
-        self.selected_jnt_horizontal_layout = QHBoxLayout()
         self.selected_jnt_widget.setLayout(self.selected_jnt_vertical_layout)
 
-        self.selected_jnt_label = QLabel("Selected controller:")
-        self.selected_jnt_lineEdit = QLineEdit()
-        ##self.selected_jnt_lineEdit.setPlaceholderText("input joint selected_jnt...")
-        self.selected_jnt_button = QPushButton("get")
-        self.selected_jnt_button.clicked.connect(self.get_command)
+        self.selected_jnt_ctrl_layout.data_button.clicked.connect(self.get_ctrl_command)
 
-        self.selected_jnt_horizontal_layout.addWidget(self.selected_jnt_label)
-        self.selected_jnt_horizontal_layout.addWidget(self.selected_jnt_lineEdit)
-        self.selected_jnt_horizontal_layout.addWidget(self.selected_jnt_button)
-
-        self.selected_jnt_vertical_layout.addLayout(self.selected_jnt_horizontal_layout)
+        self.selected_jnt_vertical_layout.addLayout(self.selected_jnt_ctrl_layout)
         self.selected_jnt_vertical_layout.addWidget(self.attribute_combobox)
 
         # ----------- HIERARCHICAL BASED SUB-WIDGET ------------ #
@@ -111,8 +79,8 @@ class StretchingWidget(QDialog):
         self.hierarchy_widget.setLayout(self.hierarchy_vertical_layout)
 
         # add start/end jnt widget class
-        self.start_jnt_controller_widget = GetSingleDataWidget(label="Start controller:")
-        self.end_jnt_controller_widget = GetSingleDataWidget(label="End controller:")
+        self.start_jnt_controller_widget = GetInputLayout(label="Start controller:")
+        self.end_jnt_controller_widget = GetInputLayout(label="End controller:")
         self.start_jnt_controller_widget.data_button.clicked.connect(self.set_start_text_command)
         self.end_jnt_controller_widget.data_button.clicked.connect(self.set_end_text_command)
 
@@ -125,7 +93,6 @@ class StretchingWidget(QDialog):
         self.get_hierarchy_button_layout.addWidget(self.get_hierarchy_button)
         self.get_hierarchy_button_layout.addWidget(self.get_hierarchy_add_button)
         self.get_hierarchy_button_layout.addWidget(self.get_hierarchy_clear_button)
-
 
         self.hierarchy_vertical_layout.addLayout(self.start_jnt_controller_widget)
         self.hierarchy_vertical_layout.addLayout(self.end_jnt_controller_widget)
@@ -155,13 +122,56 @@ class StretchingWidget(QDialog):
         self.acceleration_radiobutton_layout.addWidget(self.child_controller_radiobutton)
         self.acceleration_radiobutton_layout.addWidget(self.hierarchy_widget)
 
+        # ----------- MULTIPLIER & START/END FRAME WIDGET ------------ #
+        self.keyframe_confining_widget = QWidget()
+        self.keyframe_confining_layout = QVBoxLayout()
+        self.multiplier_layout = QHBoxLayout()
+        self.keyframe_confining_widget.setLayout(self.keyframe_confining_layout)
+
+        self.multiplier_label = QLabel("Multiplier:")
+        self.multiplier_doublespinbox = QDoubleSpinBox()
+        self.multiplier_doublespinbox.setValue(1.0)
+        self.multiplier_doublespinbox.setSingleStep(0.1)
+        self.multiplier_doublespinbox.setMaximum(100.0)
+
+        self.multiplier_layout.addWidget(self.multiplier_label)
+        self.multiplier_layout.addWidget(self.multiplier_doublespinbox)
+        self.multiplier_layout.addItem(self.horizontal_spacer)
+
+        self.keyframe_confining_layout.setContentsMargins(0, 0, 0, 0)
+        self.keyframe_confining_layout.setSpacing(1)
+
+        self.start_frame_layout = QHBoxLayout()
+        self.start_frame_label = QLabel("Start Frame:")
+        self.start_frame_spinbox = QSpinBox()
+        self.start_frame_spinbox.setMaximum(100000)
+
+        self.start_frame_layout.addWidget(self.start_frame_label)
+        self.start_frame_layout.addWidget(self.start_frame_spinbox)
+        self.start_frame_layout.addItem(self.horizontal_spacer)
+
+        self.end_frame_layout = QHBoxLayout()
+        self.end_frame_label = QLabel("End Frame: ")
+        self.end_frame_spinbox = QSpinBox()
+        self.end_frame_spinbox.setMaximum(100000)
+
+        self.end_frame_layout.addWidget(self.end_frame_label)
+        self.end_frame_layout.addWidget(self.end_frame_spinbox)
+        self.end_frame_layout.addItem(self.horizontal_spacer)
+
+        self.keyframe_confining_layout.addLayout(self.multiplier_layout)
+        self.keyframe_confining_layout.addLayout(self.start_frame_layout)
+        self.keyframe_confining_layout.addLayout(self.end_frame_layout)
+
         # ----------- CREATE MAIN BUTTON ------------ #
         self.create_button = QPushButton("Create Smear")
         self.create_button.setMinimumHeight(30)
-        self.create_button.clicked.connect(self.hierawid.print_item_string)
+        # self.create_button.clicked.connect(
+        #     self.hierawid.print_item_string)
+        self.create_button.clicked.connect(self.create_command)
         self.delete_button = QPushButton("Delete Smear")
         self.delete_button.setMinimumHeight(30)
-        ##self.delete_button.clicked.connect()
+        self.delete_button.clicked.connect(self.radiobutton_selection)
 
         # ----------- SET UP MAIN WIDGET ------------ #
         self.main_layout.addWidget(self.acceleration_radiobutton_widget)
@@ -169,6 +179,16 @@ class StretchingWidget(QDialog):
         self.main_layout.addItem(self.spacer)
         self.main_layout.addWidget(self.create_button)
         self.main_layout.addWidget(self.delete_button)
+    
+    def radiobutton_selection(self):
+        """
+        Returns
+            (int)
+        """
+        selection_number = 1
+        if self.child_controller_radiobutton.isChecked() is True:
+            selection_number = 2
+        return(int(selection_number))
     
     def hierarwid_get_data(self):
         start_text = self.start_jnt_controller_widget.data_lineedit.text()
@@ -188,28 +208,39 @@ class StretchingWidget(QDialog):
             cmds.warning("Nothing is selected")
             return
         self.end_jnt_controller_widget.data_lineedit.setText(obj_name)
-
     
-    def get_command(self):
+    def get_ctrl_command(self):
         obj_name = object_query_command("single")
         if obj_name is None:
             cmds.warning("Nothing is selected")
             return
-        self.selected_jnt_lineEdit.setText(obj_name)
+        self.selected_jnt_ctrl_layout.data_lineedit.setText(obj_name)
         attrs_list = attributes_query_command(obj_name)
         if attrs_list is None:
             cmds.warning("No available attribute")
             return
         for i in attrs_list:
             self.attribute_combobox.addItem(i)
+    
+    def create_command(self):
+        stretchAutosmear.getValues(
+            startFrame = self.start_frame_spinbox.value(),
+            endFrame = self.end_frame_spinbox.value(),
+            rawSquashAttributes = self.attribute_combobox.currentText(),
+            masterSquashAttributes = self.selected_jnt_ctrl_layout.data_lineedit.text(),
+            multiplier = self.multiplier_doublespinbox.value(),
+            startCtrl = self.start_jnt_controller_widget.data_lineedit.text(),
+            endCtrl = self.end_jnt_controller_widget.data_lineedit.text(),
+            command_option = self.radiobutton_selection()
+            )
 
 
-class GetSingleDataWidget(QHBoxLayout):
+class GetInputLayout(QHBoxLayout):
     """
-    create horizontal data widget
+    create horizontal input data widget
     """
     def __init__(self, label="label", button_label="get"):
-        super(GetSingleDataWidget, self).__init__()
+        super(GetInputLayout, self).__init__()
 
         self.label = label
         self.button_label = button_label
@@ -235,6 +266,7 @@ class AttributeComboBox(QComboBox):
     #     for member in self.attributes:
     #         self.addItem(member)
 
+
 class ChildControllerListWidget(QListWidget):
     """
     interactive ListWidget for showing main controller"s children
@@ -247,7 +279,7 @@ class ChildControllerListWidget(QListWidget):
         """
         get hierarchy to add list item
         """
-        test_stringlist = getCtrlHierarchy(start, end)
+        test_stringlist = stretchAutosmear.getCtrlHierarchy(start, end)
         for nametest in test_stringlist:
                 item = ChildControllerListWidgetItem(nametest)
 
@@ -303,32 +335,6 @@ class BlendingWidget(QDialog):
 #     """
 #     hierarchy_list = cmds.
 
-def getCtrlHierarchy(startCtrl = "",endCtrl = ""):
-    """
-    Note: Utils that actually have to import as module
-
-    Returns:
-        list: controller hierarchy
-    """
-    rawCtrlHierarchyLst = cmds.listRelatives(startCtrl,ad=True)
-    ctrlHierarchy = []
-        
-    #todo filtering the rawLst
-    for i in range(len(rawCtrlHierarchyLst)):
-        lstElement = rawCtrlHierarchyLst[i]
-            
-        #! Check if lstElement is a nurb curve and is visible
-        if cmds.nodeType(lstElement) == "nurbsCurve" and cmds.getAttr(lstElement+".visibility") == True:
-            #! getting controller name from its shape
-            ctrlName = cmds.listRelatives(lstElement,parent=True)[0]
-                
-            ctrlHierarchy.append(ctrlName)
-            
-        #! break once the the loop tranverse to the endCtrl
-        if lstElement is endCtrl:
-            break
-                
-    return ctrlHierarchy    
 
 def object_query_command(quantity="single"):
     """
