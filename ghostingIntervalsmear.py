@@ -9,6 +9,9 @@ def duplicate_geo_for_selecting_faces(raw_selection_group = []):
     this function accept the charcter group from the users and it duplicated the geometry in that
     character group, putting it in the newly created duplicate character geo group.
 
+    Importance: Since, in some case, the character mesh are locked by the rigger, hence, we need to
+    duplicate the entire mesh first. 
+
     Args:
         raw_selection_group([]): chracter group that are selected by the user.
     '''
@@ -33,7 +36,11 @@ def duplicate_geo_for_selecting_faces(raw_selection_group = []):
     
     #! group all duplicate mesh stored in the duplicate_meshes_lst 
     duplicate_group_name = '{meshes_group}_duplicate_geo'.format(meshes_group=meshes_group[0])
-    cmds.group(duplicate_meshes_lst,name = duplicate_group_name)
+
+    try:
+        cmds.group(duplicate_meshes_lst,name = duplicate_group_name)
+    except:
+        cmds.group(duplicate_meshes,name = duplicate_group_name)
 
     #todo unlock all the duplicate geo in the duplicate geo list
     duplicate_geo_lst = cmds.ls(duplicate_group_name,dag =True)
@@ -61,18 +68,18 @@ def get_ghost_object(selected_faces = []):
     that selected faces.
 
     Args:
-        selected_faces([]): list of faces ID selected by the user.
+        selected_faces([]): list of faces ID selected by the user. (selection = True, flatten = True)
     '''
 
-    #! getting the total number of faces of the geometry.
+    #todo getting the total number of faces of the geometry.
     n_face = cmds.polyEvaluate(selected_faces[0],face = True)
     
-    #todo checking the geometry faceID that are NOT selected.
+    #! checking the geometry faceID that are NOT selected.
     all_face_lst = []
     for i in range(n_face):
         
         current_face_ID= selected_faces[0].split('[')[0] + '[{i}]'.format(i=i)
-        
+
         #! if currentID did not exist in selected_faces imply, that the face aint selected by user
         if current_face_ID not in selected_faces:
              delete_face_lst = selected_faces[0].split('.')[0] + '_ghost.f[{i}]'.format(i=i)
@@ -81,6 +88,30 @@ def get_ghost_object(selected_faces = []):
     #todo create a ghosting object
     cmds.duplicate(selected_faces[0].split('.')[0],name = selected_faces[0].split('.')[0] + '_ghost')
     
-    #!delete non selected face of ghost geo
+    #todo delete non selected face of ghost geo
+    cmds.delete(current_face_ID.split('.')[0])
     cmds.polyDelFacet(all_face_lst)
     mel.eval('DeleteHistory;')
+
+def auto_delete_non_ghost_geo(ghost_group = []):
+    '''
+    auto_delete_non_ghost_geo()
+    this function allows the user to delete the non-ghost objects in the group.
+
+    Args:
+        ghost_group([]): list of the ghost_geo_grp
+    '''
+    #todo get all the geo in the group
+    selected_group_component = cmds.ls(selection = True,dag = True,type = 'mesh')
+    
+    #todo get all the non ghost geo
+    for ghost_geoShape in selected_group_component:
+        #! delete all the geo without the '_ghost' postfix
+        if '_ghost' not in ghost_geoShape:
+            try:
+                #! ensure that the shape nodes was not deleted
+                cmds.delete(ghost_geoShape.replace('Shape',''))
+            except:
+                continue
+    
+    cmds.CenterPivot(ghost_group)
