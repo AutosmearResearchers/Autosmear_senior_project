@@ -10,7 +10,8 @@ def get_values(
     multiplier=1.0,
     start_ctrl="",
     end_ctrl="",
-    command_option=1):
+    command_option=1,
+    ctrl_hierarchy=[]):
     """
     main function for proceeding stretching feature
 
@@ -28,11 +29,11 @@ def get_values(
     #todo check if user choose based on attribute or controller
     if command_option == 2:
         #! using function to get the hierarchy of the ctrl
-        ctrl_hierarchy = get_ctrl_hierarchy(start_ctrl,end_ctrl)
+        # ctrl_hierarchy = get_ctrl_hierarchy(start_ctrl,end_ctrl)
         #! using function to calculate the velocity of the obj from start_frame to end_frame
         smear_frame = calculate_velocity(start_frame,end_frame,ctrl_hierarchy)
         #! using function to keyframe the stretch smear effect (by ctrl)
-        stretch_ctrl(smear_frame,ctrl_hierarchy,multiplier)
+        stretch_ctrl(start_frame,end_frame,smear_frame,ctrl_hierarchy,multiplier)
 
     else:
         tmp_attr_list = []
@@ -40,7 +41,7 @@ def get_values(
         #! using function to query [[range],default] of the selected attribute
         attribute_value_list = find_attribute_range(raw_squash_attribute,master_squash_attribute)
         #! using function to calculate the velocity of the obj from start_frame to end_frame
-        smear_frame = calculate_velocity(start_frame=start_frame,end_frame=end_frame,ctrl_hierarchy=tmp_attr_list)
+        smear_frame = calculate_velocity(start_frame=start_frame,end_frame=end_frame,ctrl_hierarchy_list=tmp_attr_list)
         #! using function to keyframe the stretch smear effect (by attr)
         stretch_attribute(smear_frame,end_frame,master_squash_attribute,raw_squash_attribute,attribute_value_list,multiplier)
 
@@ -172,7 +173,7 @@ def calculate_velocity(start_frame=1,end_frame=1,ctrl_hierarchy=[]):
     
     return(smear_frame)
 
-def stretch_ctrl(smear_frame = 1,ctrl_hierarchy = [],multiplier = 1.0):    
+def stretch_ctrl(start_frame=1,end_frame=1,smear_frame = 1,ctrl_hierarchy = [],multiplier = 1.0):    
     """
     calculating velocity
 
@@ -185,6 +186,12 @@ def stretch_ctrl(smear_frame = 1,ctrl_hierarchy = [],multiplier = 1.0):
     locator_list = []
 
     for number in range(1,number_of_ctrl):
+        #todo keyframe start/end frame first!
+        cmds.currentTime(start_frame)
+        cmds.setKeyframe(ctrl_hierarchy[number],breakdown = False, preserveCurveShape = False, hierarchy = "None",controlPoints= False, shape = False)
+        cmds.currentTime(end_frame)
+        cmds.setKeyframe(ctrl_hierarchy[number],breakdown = False, preserveCurveShape = False, hierarchy = "None",controlPoints= False, shape = False)
+
         #todo create ctrl on the smear_frame
         cmds.currentTime(smear_frame)
         ctrl_transaltion = cmds.xform(ctrl_hierarchy[number],query=True,translation=True,worldSpace=True)
