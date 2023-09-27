@@ -129,11 +129,13 @@ def get_values(
             ghosting_geo_list.append(duplicate_geo_name)
             #!remove all the unselected face for that geometry
             if face_ID_list is not []:    
-                remove_non_selected_faces(duplicate_geo_name,face_ID_list)
+                remove_non_selected_faces(duplicate_geo_name,face_ID_list)    
     
     grouping = cmds.group(ghosting_geo_list,name = 'ghosting_Grp')
     group_name = cmds.ls(grouping)[0]
 
+    #!clear the text file after smear is complete
+    clear_face_ID_data()
 
 ############################################################################    
     #NOTE: Creation of Clear Smear for testing purpose ONLY
