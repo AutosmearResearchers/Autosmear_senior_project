@@ -20,8 +20,8 @@ from autosmear import demo_stretching_utils
 reload(demo_stretching_utils)
 
 #! WIP
-# from autosmear import ghostingIntervalsmear
-# reload(ghostingIntervalsmear)
+from autosmear import ghostingIntervalsmear
+reload(ghostingIntervalsmear)
 
 class MainWidget(QMainWindow):
     """
@@ -30,8 +30,8 @@ class MainWidget(QMainWindow):
     def __init__(self, *args, **kwargs):
         super(MainWidget, self).__init__(*args, **kwargs)
 
-        self.resize(320, 570)
-        self.setWindowTitle("Demo Autosmear Tool")
+        self.resize(320, 620)
+        self.setWindowTitle("Autosmear Tool")
 
         self.stretching_feature = StretchingWidget()
         self.infoinput = InfoInput()
@@ -105,8 +105,9 @@ class MainWidget(QMainWindow):
         #! Creation of Clear Smear
         if not cmds.objExists("smear_history_grp"):
             cmds.group(em=True, name="smear_history_grp")
-
-        demo_stretching_utils.get_values(
+        
+        if self.feature_tab_widget.currentIndex() == 0:
+            demo_stretching_utils.get_values(
             start_frame = self.infoinput.start_frame_spinbox.value(),
             end_frame = self.infoinput.end_frame_spinbox.value(),
             raw_squash_attribute = self.attribute_combobox.currentText(),
@@ -117,6 +118,14 @@ class MainWidget(QMainWindow):
             command_option = self.stretching_feature.radiobutton_selection(),
             ctrl_hierarchy = self.stretching_feature.hierawid.return_item_list()
             )
+        elif self.feature_tab_widget.currentIndex() == 1:
+            ghostingIntervalsmear.get_values(
+            start_frame = self.infoinput.start_frame_spinbox.value(),
+            end_frame = self.infoinput.end_frame_spinbox.value(),
+            smear_interval = self.infoinput.interval_spinbox.value()
+            )
+        else:
+            print("NO TASK")
     
     def clear_command(self):
         attr_name = cmds.listAttr("smear_history_grp", ud=True)[0]
@@ -301,8 +310,17 @@ class InfoInput(QWidget):
 
         self.horizontal_spacer = QSpacerItem(20, 40, QSizePolicy.Expanding)
 
+        self.line = QFrame()
+        self.line.setFrameShape(QFrame.HLine)
+        self.line.setFrameShadow(QFrame.Sunken)
+
+        self.setMaximumHeight(170)
+
         # ----------- MULTIPLIER & START/END FRAME WIDGET ------------ #
         self.keyframe_confining_layout = QVBoxLayout()
+        self.keyframe_confining_layout.setContentsMargins(0, 0, 0, 0)
+        self.keyframe_confining_layout.setSpacing(1)
+
         self.multiplier_layout = QHBoxLayout()
         self.setLayout(self.keyframe_confining_layout)
 
@@ -315,9 +333,6 @@ class InfoInput(QWidget):
         self.multiplier_layout.addWidget(self.multiplier_label)
         self.multiplier_layout.addWidget(self.multiplier_doublespinbox)
         self.multiplier_layout.addItem(self.horizontal_spacer)
-
-        self.keyframe_confining_layout.setContentsMargins(0, 0, 0, 0)
-        self.keyframe_confining_layout.setSpacing(1)
 
         self.start_frame_layout = QHBoxLayout()
         self.start_frame_label = QLabel("Start Frame:")
@@ -337,9 +352,52 @@ class InfoInput(QWidget):
         self.end_frame_layout.addWidget(self.end_frame_spinbox)
         self.end_frame_layout.addItem(self.horizontal_spacer)
 
+        self.interval_layout = QHBoxLayout()
+        self.interval_checkbox = QCheckBox("Create interval:")
+        self.interval_spinbox = QSpinBox()
+        self.interval_spinbox.setEnabled(False)
+        self.interval_spinbox.setMaximum(100000)
+
+        self.interval_checkbox.setChecked(False)
+        self.interval_checkbox.stateChanged.connect(self.interval_connection)
+
+        self.interval_layout.addWidget(self.interval_checkbox)
+        self.interval_layout.addWidget(self.interval_spinbox)
+        self.interval_layout.addItem(self.horizontal_spacer)
+
+        self.custom_smear_layout = QHBoxLayout()
+        self.custom_smear_checkbox = QCheckBox("Create custom smear frame:")
+        self.custom_smear_spinbox = QSpinBox()
+        self.custom_smear_spinbox.setEnabled(False)
+        self.custom_smear_spinbox.setMaximum(100000)
+
+        self.custom_smear_checkbox.setChecked(False)
+        self.custom_smear_checkbox.stateChanged.connect(self.custom_smear_connection)
+
+        self.custom_smear_layout.addWidget(self.custom_smear_checkbox)
+        self.custom_smear_layout.addWidget(self.custom_smear_spinbox)
+        self.custom_smear_layout.addItem(self.horizontal_spacer)
+
         self.keyframe_confining_layout.addLayout(self.multiplier_layout)
         self.keyframe_confining_layout.addLayout(self.start_frame_layout)
         self.keyframe_confining_layout.addLayout(self.end_frame_layout)
+        self.keyframe_confining_layout.addWidget(self.line)
+        self.keyframe_confining_layout.addLayout(self.interval_layout)
+        self.keyframe_confining_layout.addLayout(self.custom_smear_layout)
+    
+    def interval_connection(self):
+        if self.interval_checkbox.isChecked() is True:
+            self.interval_spinbox.setEnabled(True)
+            self.custom_smear_checkbox.setChecked(False)
+        else:
+            self.interval_spinbox.setEnabled(False)
+    
+    def custom_smear_connection(self):
+        if self.custom_smear_checkbox.isChecked() is True:
+            self.custom_smear_spinbox.setEnabled(True)
+            self.interval_checkbox.setChecked(False)
+        else:
+            self.custom_smear_spinbox.setEnabled(False)
 
 
 class GetInputLayout(QHBoxLayout):
@@ -383,6 +441,20 @@ class AttributeComboBox(QComboBox):
     # def add_item(self)
     #     for member in self.attributes:
     #         self.addItem(member)
+
+
+class GhostFaceListWidget(QListWidget):
+    """
+    interactive ListWidget for showing main controller's children
+    """
+    def __init__(self, *args, **kwargs):
+        super(GhostFaceListWidget, self).__init__(*args, **kwargs)
+        self.item_list = []
+    
+    def get_faces_obj_name(self, obj_name="None"):
+        item = ChildControllerListWidgetItem(obj_name)
+        self.indexFromItem(item)
+        self.addItem(item)
 
 
 class ChildControllerListWidget(QListWidget):
@@ -482,27 +554,31 @@ class GhostingWidget(QWidget):
         self.main_layout = QVBoxLayout()
         self.setLayout(self.main_layout)
 
-        self.spacer = QSpacerItem(20, 40, QSizePolicy.Minimum, QSizePolicy.Expanding)
+        self.ghost_list = GhostFaceListWidget()
+
+        self.spacer = QSpacerItem(20, 150, QSizePolicy.Minimum, QSizePolicy.Expanding)
         self.horizontal_spacer = QSpacerItem(20, 40, QSizePolicy.Expanding)
 
         self.bake_layout = QHBoxLayout()
         self.bake_label = QLabel("Initiate Bake Object")
-        self.duplicate_obj_button = QPushButton("Select object")
-        #! WIP
-        # self.duplicate_obj_button.clicked.connect(self.select_obj_command)
-        self.bake_from_faces_button = QPushButton("Bake from faces")
+        self.duplicate_obj_button = QPushButton("Bake selection")
+        self.duplicate_obj_button.clicked.connect(self.bake_obj_command)
+
+        self.faces_label = QLabel("Faces of:")
 
         self.bake_layout.addWidget(self.bake_label)
         self.bake_layout.addWidget(self.duplicate_obj_button)
-        self.bake_layout.addWidget(self.bake_from_faces_button)
         self.bake_layout.addItem(self.horizontal_spacer)
 
         self.main_layout.addLayout(self.bake_layout)
+        self.main_layout.addWidget(self.faces_label)
+        self.main_layout.addWidget(self.ghost_list)
         self.main_layout.addItem(self.spacer)
     
-    def select_obj_command(self):
+    def bake_obj_command(self):
         obj = object_query_command()
-        ghostingIntervalsmear.duplicate_geo_for_selecting_faces(raw_selection_group=obj)
+        ghostingIntervalsmear.get_ghost_object_face_ID(selected_faces=obj)
+        self.ghost_list.get_faces_obj_name((obj[0]).split(".")[0])
 
 
 #! WIP
