@@ -2,116 +2,177 @@ import maya.cmds as cmds
 import maya.mel as mel
 from pprint import pprint
 import numpy as np
+import os
 
-def duplicate_geo_for_selecting_faces(raw_selection_group = []):
+def get_current_maya_file_path(full_path = False):
     '''
-    duplicate_geo_for_selecting_faces()
-    this function accept the charcter group from the users and it duplicated the geometry in that
-    character group, putting it in the newly created duplicate character geo group.
+    get_current_maya_file_path()
+    '''
+    maya_file_path = cmds.file(query=True,expandName=True)
 
-    Importance: Since, in some case, the character mesh are locked by the rigger, hence, we need to
-    duplicate the entire mesh first. 
+    if full_path:
+        scene_directory = maya_file_path[:maya_file_path.rfind('/')+1]
+        return scene_directory
+    else:
+        return maya_file_path
+
+def get_smear_interval(start_frame = 1,end_frame = 1,smear_interval=1):
+    '''
+    get_smear_interval()
+    this function accepts the start and end frame and returns the list of intervals the smears must 
+    be generated. 
+    
+    Args:
+        start_frame (int): start keyframe
+        end_frame (int): end keyframe
+        smear_interval (int): interval that the smear should be generated
+    '''
+    interval_smear_list = [] #!list containing all interval that smear must takes place
+
+    for current_frame in range(start_frame,end_frame+1,smear_interval):
+        interval_smear_list.append(current_frame)
+    
+    return interval_smear_list 
+
+def get_ghost_object_face_ID(selected_faces = []):
+    '''
+    get_ghost_object_face_ID()
+    this function accepts selected faces or geometry from the user and store its ID in the text file
 
     Args:
-        raw_selection_group([]): chracter group that are selected by the user.
+        selected_faces([]): list of faces ID selected by the user.
     '''
-
-    #todo filtering only 'mesh' type from raw_selection_group and put it to meshes_group. 
-    meshes_group = cmds.ls(raw_selection_group,dag=True,type='mesh')
+    #todo getting all the selected faces
+    face_ID = cmds.ls(selected_faces,flatten=True)
+    path = get_current_maya_file_path(True)
     
-    #todo duplicate the meshes from the meshes_group and put it in a list duplicate_meshes_lst
-    duplicate_meshes = cmds.duplicate(meshes_group)
-    duplicate_meshes_lst = [] #! list storing all duplicate meshes name for grouping
-
-    #? Now, meshes are duplicated but are are located inside the character_group
-    #todo unparent the duplicate meshes and put it in the new group
-    for ungroup_obj in duplicate_meshes:
-        try:
-            #! ungroup the current mesh element in the duplicate_meshes list  
-            cmds.parent(ungroup_obj,world=True)
-            duplicate_meshes_lst.append(ungroup_obj)
-
-        except:
-            continue
-    
-    #! group all duplicate mesh stored in the duplicate_meshes_lst 
-    duplicate_group_name = '{meshes_group}_duplicate_geo'.format(meshes_group=meshes_group[0])
-
-    try:
-        cmds.group(duplicate_meshes_lst,name = duplicate_group_name)
-    except:
-        cmds.group(duplicate_meshes,name = duplicate_group_name)
-
-    #todo unlock all the duplicate geo in the duplicate geo list
-    duplicate_geo_lst = cmds.ls(duplicate_group_name,dag =True)
-
-    for ungroup_obj in duplicate_geo_lst:
-        try:
-            cmds.setAttr(ungroup_obj+'.tx',lock=False)
-            cmds.setAttr(ungroup_obj+'.ty',lock=False)
-            cmds.setAttr(ungroup_obj+'.tz',lock=False)
-
-            cmds.setAttr(ungroup_obj+'.rx',lock=False)
-            cmds.setAttr(ungroup_obj+'.ry',lock=False)
-            cmds.setAttr(ungroup_obj+'.rz',lock=False)
-
-            cmds.setAttr(ungroup_obj+'.sx',lock=False)
-            cmds.setAttr(ungroup_obj+'.sy',lock=False)
-            cmds.setAttr(ungroup_obj+'.sz',lock=False)
-        except:
-            continue
-
-def get_ghost_object(selected_faces = []):
-    '''
-    get_ghost_object()
-    this function accepts selected faces from the user and then it creates a ghosting object from
-    that selected faces.
-
-    Args:
-        selected_faces([]): list of faces ID selected by the user. (selection = True, flatten = True)
-    '''
-
-    #todo getting the total number of faces of the geometry.
-    n_face = cmds.polyEvaluate(selected_faces[0],face = True)
-    
-    #! checking the geometry faceID that are NOT selected.
-    all_face_lst = []
-    for i in range(n_face):
+    if '.f[' in face_ID[0]:    
+        geo_name = face_ID[0][:face_ID[0].rfind('.')]
         
-        current_face_ID= selected_faces[0].split('[')[0] + '[{i}]'.format(i=i)
+        all_faces = cmds.polyListComponentConversion(geo_name,toFace=True)
+        all_faces_ID = cmds.ls(all_faces,flatten = True)
+        
+        for remove_selected_face in face_ID:
+            all_faces_ID.remove(remove_selected_face)
+                
+    else:
+        all_faces_ID = face_ID
 
-        #! if currentID did not exist in selected_faces imply, that the face aint selected by user
-        if current_face_ID not in selected_faces:
-             delete_face_lst = selected_faces[0].split('.')[0] + '_ghost.f[{i}]'.format(i=i)
-             all_face_lst.append(delete_face_lst)
+    file = open('{path}collection_face_ID.txt'.format(path = path),'a+')
+    file.write('{all_faces_ID},'.format(all_faces_ID=all_faces_ID))
+    file.close()
 
-    #todo create a ghosting object
-    cmds.duplicate(selected_faces[0].split('.')[0],name = selected_faces[0].split('.')[0] + '_ghost')
-    
-    #todo delete non selected face of ghost geo
-    cmds.delete(current_face_ID.split('.')[0])
-    cmds.polyDelFacet(all_face_lst)
-    mel.eval('DeleteHistory;')
-
-def auto_delete_non_ghost_geo(ghost_group = []):
+def clear_face_ID_data():
     '''
-    auto_delete_non_ghost_geo()
-    this function allows the user to delete the non-ghost objects in the group.
+    clear_face_ID_data()
+    this function clear all the selected face IDs
 
     Args:
-        ghost_group([]): list of the ghost_geo_grp
+        None
     '''
-    #todo get all the geo in the group
-    selected_group_component = cmds.ls(selection = True,dag = True,type = 'mesh')
+    path = get_current_maya_file_path(True)
+
+    clear_file = open('{path}collection_face_ID.txt'.format(path=path),'w')
+    clear_file.close()
+
+
+def get_values(
+    start_frame=1,
+    end_frame=1,
+    smear_interval=1,
+    ):
+    '''
+    main function for proceeding ghosting smear feature
+
+    Args:
+        start_frame (int): start keyframe
+        end_frame (int): end keyframe
+        smear_interval (int): interval that the smear should be generated
+    '''
+    #todo read the text file containing the face_ID ghosting data
+    path = get_current_maya_file_path(True)
+
+    read_file = open('{path}collection_face_ID.txt'.format(path=path),'r')
+    read = read_file.readlines()[0]
+    ghosting_lst = eval(read)
+    read_file.close()
+
+    #! calculate the smear_frame interval as a list
+    smear_frames = get_smear_interval(start_frame,end_frame,smear_interval)
+
+    ghosting_geo_list = []  #? a list stored all the ghosting geometry generated
+
+    #todo transversing through each object face_ID 
+    for each_ghost_geo in ghosting_lst:
+        first_element = each_ghost_geo[0] #eg. jecket_Geo.f[3280]
+
+        #todo check wether the current elemeny contains the face ID or the entire geometry
+        #!contains a face ID i.e. '.f[]'
+        if '.f[' in first_element:  
+            original_geo_name = first_element[:first_element.rfind('.')]
+            face_ID_list = []
+            
+            for each_face in each_ghost_geo:
+                face_ID_list.append(each_face[each_face.rfind('.'):])
+
+        #!contains the entire geometry
+        else:   
+            original_geo_name = first_element
+            face_ID_list = []
+
+        #todo create ghosting for every smear frames calculated.
+        for current_frame in smear_frames:
+            #!set the keyframe to current frame 
+            cmds.currentTime(current_frame)
+            #!duplicate the geometry 
+            duplicate_geo_name = duplicate_geometry(original_geo_name)
+            ghosting_geo_list.append(duplicate_geo_name)
+            #!remove all the unselected face for that geometry
+            if face_ID_list is not []:    
+                remove_non_selected_faces(duplicate_geo_name,face_ID_list)
     
-    #todo get all the non ghost geo
-    for ghost_geoShape in selected_group_component:
-        #! delete all the geo without the '_ghost' postfix
-        if '_ghost' not in ghost_geoShape:
-            try:
-                #! ensure that the shape nodes was not deleted
-                cmds.delete(ghost_geoShape.replace('Shape',''))
-            except:
-                continue
+    grouping = cmds.group(ghosting_geo_list,name = 'ghosting_Grp')
+    group_name = cmds.ls(grouping)[0]
+
+
+############################################################################    
+    #NOTE: Creation of Clear Smear for testing purpose ONLY
+    if not cmds.objExists("smear_history_grp"):
+        cmds.group(em=True, name="smear_history_grp")
+############################################################################
+
+    #! create history dict and record history of smear
+    history_dict = "{frame}||{ghost_grp}".format(frame=start_frame, ghost_grp=group_name)
+    attr_naming = "ghosting_{keyframe}_{group}".format(group= group_name,keyframe=start_frame)
+
+    cmds.addAttr("smear_history_grp", ln=attr_naming, dt="string")
+    cmds.setAttr("smear_history_grp.{attr_name}".format(attr_name = attr_naming), history_dict, type="string", lock = True)
+
+def duplicate_geometry(ghosting_object=''):
+    '''
+    duplicate_geometry()
+    this function accepts the original geometry name then, duplicates it with the new name. It returns
+    the new name.
+
+    Args:
+        ghosting_object(str): Geometry to be duplicated. 
+    '''
     
-    cmds.CenterPivot(ghost_group)
+    #todo duplicate the entire geometry
+    new_name = '{ghost_name}__Autosmear_ghost_obj'.format(ghost_name=ghosting_object)
+    duplicate_geo = cmds.duplicate(ghosting_object,name = new_name)
+    cmds.parent(duplicate_geo,world=True)
+
+    duplicate_geo_name = cmds.ls(duplicate_geo)[0]
+
+    return duplicate_geo_name
+
+def remove_non_selected_faces(ghosting_name = '',face_ID_list = []):
+    '''
+    remove_non_selected_faces()
+    '''
+    all_delete_face = []
+    for each_face in face_ID_list:
+        all_delete_face.append(ghosting_name+each_face)
+
+    cmds.polyDelFacet(all_delete_face)
