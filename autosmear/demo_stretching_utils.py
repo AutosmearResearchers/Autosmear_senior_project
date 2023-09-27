@@ -218,8 +218,14 @@ def stretch_ctrl(start_frame=1,end_frame=1,smear_frame = 1,ctrl_hierarchy = [],m
     loc_group = cmds.group(locator_list,name = "{ctrlHie}_autoSmearTool_LOC_grp".format(ctrlHie = ctrl_hierarchy[number]))
 
     #! create history dict and record history of smear
+    order_num = 1
+    last_history = cmds.listAttr("smear_history_grp", ud=True)
+    if last_history is not None:
+        if len(last_history) > 0:
+            order_num = int((last_history[-1]).split("_s")[1]) + 1
+
     history_dict = "{frame}||{ctrl}".format(frame=used_frame, ctrl=used_ctrl)
-    attr_naming = "stretching_at_{keyframe}".format(keyframe=used_frame)
+    attr_naming = "stretching_s{order}".format(order=order_num)
 
     cmds.addAttr("smear_history_grp", ln=attr_naming, dt="string")
     cmds.setAttr("smear_history_grp.{attr_name}".format(attr_name = attr_naming), history_dict, type="string", lock = True)
