@@ -2,7 +2,7 @@
 #run this script in Maya Script Editor after putting the .py file in the maya scripts folder
 
 from importlib import reload
-import demo_stretching_ui
+from autosmear import demo_stretching_ui
 reload(demo_stretching_ui)
 demo_stretching_ui.run()
 """
