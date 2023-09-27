@@ -1,6 +1,7 @@
 import maya.cmds as cmds
 import maya.mel as mel
 import numpy as np
+import ast
 
 def get_values(
     start_frame=1,
@@ -184,6 +185,7 @@ def stretch_ctrl(start_frame=1,end_frame=1,smear_frame = 1,ctrl_hierarchy = [],m
     """
     number_of_ctrl = len(ctrl_hierarchy)
     locator_list = []
+    used_ctrl=[]
 
     for number in range(1,number_of_ctrl):
         #todo keyframe start/end frame first!
@@ -207,10 +209,20 @@ def stretch_ctrl(start_frame=1,end_frame=1,smear_frame = 1,ctrl_hierarchy = [],m
             cmds.xform(ctrl_hierarchy[number],translation=loc_translate,worldSpace=True)
 
             #todo snap the ctrl of the next frame to the created loc
-            cmds.currentTime(smear_frame+1)
+            used_frame = smear_frame+1
+            cmds.currentTime(used_frame)
             cmds.xform(ctrl_hierarchy[number],translation=loc_translate,worldSpace=True)
+            used_ctrl.append(ctrl_hierarchy[number])
     
     #todo group all the locators created after the iteration is complete
     loc_group = cmds.group(locator_list,name = "{ctrlHie}_autoSmearTool_LOC_grp".format(ctrlHie = ctrl_hierarchy[number]))
 
+    #! create history dict and record history of smear
+    history_dict = "{frame}||{ctrl}".format(frame=used_frame, ctrl=used_ctrl)
+    attr_naming = "stretching_at_{keyframe}".format(keyframe=used_frame)
+
+    cmds.addAttr("smear_history_grp", ln=attr_naming, dt="string")
+    cmds.setAttr("smear_history_grp.{attr_name}".format(attr_name = attr_naming), history_dict, type="string", lock = True)
+
 #! keyframe the Charlizard
+
