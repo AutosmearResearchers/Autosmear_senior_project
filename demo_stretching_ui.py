@@ -14,36 +14,134 @@ from shiboken2 import wrapInstance
 from importlib import reload
 import maya.OpenMayaUI as omui
 import maya.cmds as cmds
+import ast
 
-import demo_stretching_utils
+from autosmear import demo_stretching_utils
 reload(demo_stretching_utils)
 
-class MainWidget(QDialog):
+#! WIP
+# from autosmear import ghostingIntervalsmear
+# reload(ghostingIntervalsmear)
+
+class MainWidget(QMainWindow):
     """
     main widget that contains TabWidget of the 3 main features
     """
     def __init__(self, *args, **kwargs):
         super(MainWidget, self).__init__(*args, **kwargs)
 
-        self.resize(330, 420)
+        self.resize(320, 570)
         self.setWindowTitle("Demo Autosmear Tool")
 
-        self.main_layout = QVBoxLayout()
-        self.feature_tab_widget = QTabWidget()
+        self.stretching_feature = StretchingWidget()
+        self.infoinput = InfoInput()
+        self.attribute_combobox = AttributeComboBox()
+        self.hierawid = ChildControllerListWidget()
 
-        self.feature_tab_widget.addTab(StretchingWidget(),"Stretching")
+        self.main_widget = QWidget()
+        self.setCentralWidget(self.main_widget)
+
+        self.main_layout = QVBoxLayout()
+        self.main_widget.setLayout(self.main_layout)
+
+        self.feature_tab_widget = QTabWidget()
+        self.main_menubar = self.menuBar()
+
+        self.main_toolbar = QToolBar()
+        self.main_toolbar.setMovable(False)
+
+        self.reload_action = QAction("Reload Tool", self)
+        self.open_history = QAction("Open Smear History", self)
+        self.help_action = QAction("Go to Autosmear Documentation", self)
+
+        self.edit_menu = self.main_menubar.addMenu("Edit")
+        self.edit_menu.addAction(self.reload_action)
+        self.edit_menu.addAction(self.open_history)
+
+        self.help_menu = self.main_menubar.addMenu("Help")
+        self.help_menu.addAction(self.help_action)
+
+        self.feature_tab_widget.addTab(self.stretching_feature,"Stretching")
         self.feature_tab_widget.addTab(GhostingWidget(),"Ghosting")
         self.feature_tab_widget.addTab(BlendingWidget(),"Blending")
 
+        # ----------- CREATE MAIN BUTTON ------------ #
+        self.button_layout = QVBoxLayout()
+
+        self.create_button = QPushButton("Create Smear")
+        self.create_button.setMinimumHeight(30)
+        self.delete_button = QPushButton("Delete Smear")
+        self.delete_button.setMinimumHeight(30)
+        self.dummy_button = QPushButton("Dummy Button")
+        self.dummy_button.setMinimumHeight(30)
+
+        self.button_layout.addWidget(self.create_button)
+        self.button_layout.addWidget(self.delete_button)
+
+        # self.create_button.clicked.connect(
+        #     self.hierawid.return_item_string)
+        self.create_button.clicked.connect(self.create_command)
+        #? self.delete_button.clicked.connect(self.stretching_feature.delete_command)
+        self.delete_button.clicked.connect(self.clear_command)
+        # # self.dummy_button.clicked.connect(self.hierawid.return_item_list)
+        # self.dummy_button.clicked.connect(self.self.stretching_feature.delete_command)
+
+        # ----------- ADD WIDGETS TO MAIN LAYOUT ------------ #
+
+        self.addToolBar(self.main_toolbar)
         self.main_layout.addWidget(self.feature_tab_widget)
+        self.main_layout.addWidget(self.infoinput)
+        self.main_layout.addLayout(self.button_layout)
 
         self.setLayout(self.main_layout)
+    
+    def create_command(self):
+        """
+        Create Smear command bounded to the button
+        (can be defined as main connection with Utils)
+
+        can be switched with other main features' create command
+        """
+        #! Creation of Clear Smear
+        if not cmds.objExists("smear_history_grp"):
+            cmds.group(em=True, name="smear_history_grp")
+
+        demo_stretching_utils.get_values(
+            start_frame = self.infoinput.start_frame_spinbox.value(),
+            end_frame = self.infoinput.end_frame_spinbox.value(),
+            raw_squash_attribute = self.attribute_combobox.currentText(),
+            master_squash_attribute = self.stretching_feature.selected_jnt_ctrl_layout.data_lineedit.text(),
+            multiplier = self.infoinput.multiplier_doublespinbox.value(),
+            start_ctrl = self.stretching_feature.start_jnt_controller_widget.data_lineedit.text(),
+            end_ctrl = self.stretching_feature.end_jnt_controller_widget.data_lineedit.text(),
+            command_option = self.stretching_feature.radiobutton_selection(),
+            ctrl_hierarchy = self.stretching_feature.hierawid.return_item_list()
+            )
+    
+    def clear_command(self):
+        attr_name = cmds.listAttr("smear_history_grp", ud=True)[0]
+        smear_history = "smear_history_grp.{attr}".format(attr=attr_name)
+        history_dict = cmds.getAttr(smear_history)
+        split_history_dict = history_dict.split("||")
+        converted_keyframe_list = ast.literal_eval(split_history_dict[1])
+        current_time = int(split_history_dict[0])
+
+        for member in converted_keyframe_list:
+            cmds.cutKey( member, time=(current_time,current_time), option="keys", clear=True )
+        
+        cmds.setAttr(smear_history, lock=False)
+        cmds.deleteAttr("smear_history_grp", at=attr_name)
+        cmds.delete(
+            "{last_ctrl}_autoSmearTool_LOC_grp".format(last_ctrl=converted_keyframe_list[-1]))
 
 
-class StretchingWidget(QDialog):
+class StretchingWidget(QWidget):
     """
     Stretching feature sub-tab widget
     """
+
+    signal = Signal()
+
     def __init__(self, *args, **kwargs):
         super(StretchingWidget, self).__init__(*args, **kwargs)
 
@@ -54,11 +152,18 @@ class StretchingWidget(QDialog):
 
         self.hierawid = ChildControllerListWidget()
         self.attribute_combobox = AttributeComboBox()
+        self.infoinput = InfoInput()
+        self.delete_current_command = None
 
+        self.main_toolbox = QToolBox()
+        # self.main_toolbox.setStyleSheet("background-color: #4d4d4d")
 
         # ----------- CREATE SPACER ------------ #
         self.spacer = QSpacerItem(20, 40, QSizePolicy.Minimum, QSizePolicy.Expanding)
         self.horizontal_spacer = QSpacerItem(20, 40, QSizePolicy.Expanding)
+        self.fixed_spacer = QSpacerItem(20, 220, QSizePolicy.Minimum, QSizePolicy.Fixed)
+
+        self.basedon_label = QLabel("Based on:")
 
         # ----------- ATTRIBUTE BASED SUB-WIDGET ------------ #
         self.selected_jnt_ctrl_layout = GetInputLayout(label="Selected controller:")
@@ -71,6 +176,7 @@ class StretchingWidget(QDialog):
 
         self.selected_jnt_vertical_layout.addLayout(self.selected_jnt_ctrl_layout)
         self.selected_jnt_vertical_layout.addWidget(self.attribute_combobox)
+        self.selected_jnt_vertical_layout.addItem(self.spacer)
 
         # ----------- HIERARCHICAL BASED SUB-WIDGET ------------ #
         self.hierarchy_widget = QWidget()
@@ -85,100 +191,43 @@ class StretchingWidget(QDialog):
         self.end_jnt_controller_widget.data_button.clicked.connect(self.set_end_text_command)
 
         self.get_hierarchy_button = QPushButton("get hierarchy")
-        self.get_hierarchy_add_button = QPushButton("add..(WIP)")
-        self.get_hierarchy_add_button.setEnabled(False)
-        self.get_hierarchy_clear_button = QPushButton("clear..(WIP)")
-        self.get_hierarchy_clear_button.setEnabled(False)
+        self.get_hierarchy_button.setStyleSheet("background-color: #4d4d4d")
+        self.get_hierarchy_button.clicked.connect(self.hierarwid_get_data)
+
+        self.get_hierarchy_add_button = QPushButton("add")
+        self.get_hierarchy_add_button.setStyleSheet("background-color: #4d4d4d")
+        self.get_hierarchy_add_button.clicked.connect(self.hierawid.add_new_item)
+
+        self.get_hierarchy_remove_button = QPushButton("remove")
+        self.get_hierarchy_remove_button.setStyleSheet("background-color: #4d4d4d")
+        self.get_hierarchy_remove_button.clicked.connect(self.hierawid.delete_current_index)
 
         self.get_hierarchy_button_layout.addWidget(self.get_hierarchy_button)
         self.get_hierarchy_button_layout.addWidget(self.get_hierarchy_add_button)
-        self.get_hierarchy_button_layout.addWidget(self.get_hierarchy_clear_button)
+        self.get_hierarchy_button_layout.addWidget(self.get_hierarchy_remove_button)
 
         self.hierarchy_vertical_layout.addLayout(self.start_jnt_controller_widget)
         self.hierarchy_vertical_layout.addLayout(self.end_jnt_controller_widget)
         self.hierarchy_vertical_layout.addLayout(self.get_hierarchy_button_layout)
         self.hierarchy_vertical_layout.addWidget(self.hierawid)
 
-        self.get_hierarchy_button.clicked.connect(self.hierarwid_get_data)
+        # --- test widget 02 --- #
+        self.lolo = QWidget()
 
-        self.hierarchy_widget.setEnabled(False)
+        # self.selected_jnt_widget.setStyleSheet("background-color: #4d4d4d")
+        # self.hierarchy_widget.setStyleSheet("background-color: #4d4d4d")
 
-        # ----------- RADIOBUTTONS WIDGET ------------ #
-        self.acceleration_radiobutton_widget = QWidget()
-        self.acceleration_radiobutton_layout = QVBoxLayout()
-        self.acceleration_radiobutton_widget.setLayout(self.acceleration_radiobutton_layout)
+        self.main_toolbox.addItem(self.selected_jnt_widget, "attribute")
+        self.main_toolbox.addItem(self.hierarchy_widget, "controllers")
+        # self.main_toolbox.setCurrentIndex(1)
 
-        self.child_controller_radiobutton = QRadioButton("Based on hierarchical controller:")
-        self.attribute_radiobutton = QRadioButton("Based on squash/stretch attribute:")
-        self.attribute_radiobutton.setChecked(True)
-        
-        self.attribute_radiobutton.toggled.connect(self.selected_jnt_widget.setEnabled)
-        self.attribute_radiobutton.toggled.connect(self.attribute_combobox.setEnabled)
-
-        self.child_controller_radiobutton.toggled.connect(self.hierarchy_widget.setEnabled)
-
-        self.acceleration_radiobutton_layout.addWidget(self.attribute_radiobutton)
-        self.acceleration_radiobutton_layout.addWidget(self.selected_jnt_widget)
-        self.acceleration_radiobutton_layout.addWidget(self.child_controller_radiobutton)
-        self.acceleration_radiobutton_layout.addWidget(self.hierarchy_widget)
-
-        # ----------- MULTIPLIER & START/END FRAME WIDGET ------------ #
-        self.keyframe_confining_widget = QWidget()
-        self.keyframe_confining_layout = QVBoxLayout()
-        self.multiplier_layout = QHBoxLayout()
-        self.keyframe_confining_widget.setLayout(self.keyframe_confining_layout)
-
-        self.multiplier_label = QLabel("Multiplier:")
-        self.multiplier_doublespinbox = QDoubleSpinBox()
-        self.multiplier_doublespinbox.setValue(1.0)
-        self.multiplier_doublespinbox.setSingleStep(0.1)
-        self.multiplier_doublespinbox.setMaximum(100.0)
-
-        self.multiplier_layout.addWidget(self.multiplier_label)
-        self.multiplier_layout.addWidget(self.multiplier_doublespinbox)
-        self.multiplier_layout.addItem(self.horizontal_spacer)
-
-        self.keyframe_confining_layout.setContentsMargins(0, 0, 0, 0)
-        self.keyframe_confining_layout.setSpacing(1)
-
-        self.start_frame_layout = QHBoxLayout()
-        self.start_frame_label = QLabel("Start Frame:")
-        self.start_frame_spinbox = QSpinBox()
-        self.start_frame_spinbox.setMaximum(100000)
-
-        self.start_frame_layout.addWidget(self.start_frame_label)
-        self.start_frame_layout.addWidget(self.start_frame_spinbox)
-        self.start_frame_layout.addItem(self.horizontal_spacer)
-
-        self.end_frame_layout = QHBoxLayout()
-        self.end_frame_label = QLabel("End Frame: ")
-        self.end_frame_spinbox = QSpinBox()
-        self.end_frame_spinbox.setMaximum(100000)
-
-        self.end_frame_layout.addWidget(self.end_frame_label)
-        self.end_frame_layout.addWidget(self.end_frame_spinbox)
-        self.end_frame_layout.addItem(self.horizontal_spacer)
-
-        self.keyframe_confining_layout.addLayout(self.multiplier_layout)
-        self.keyframe_confining_layout.addLayout(self.start_frame_layout)
-        self.keyframe_confining_layout.addLayout(self.end_frame_layout)
-
-        # ----------- CREATE MAIN BUTTON ------------ #
-        self.create_button = QPushButton("Create Smear")
-        self.create_button.setMinimumHeight(30)
-        # self.create_button.clicked.connect(
-        #     self.hierawid.return_item_string)
-        self.create_button.clicked.connect(self.create_command)
-        self.delete_button = QPushButton("Delete Smear")
-        self.delete_button.setMinimumHeight(30)
-        self.delete_button.clicked.connect(self.radiobutton_selection)
-
-        # ----------- SET UP MAIN WIDGET ------------ #
-        self.main_layout.addWidget(self.acceleration_radiobutton_widget)
-        self.main_layout.addWidget(self.keyframe_confining_widget)
-        self.main_layout.addItem(self.spacer)
-        self.main_layout.addWidget(self.create_button)
-        self.main_layout.addWidget(self.delete_button)
+        # ----------- ADD WIGETS TO MAIN LAYOUT ------------ #
+        self.main_layout.addWidget(self.basedon_label)
+        self.main_layout.addWidget(self.main_toolbox)
+        # self.main_layout.addItem(self.fixed_spacer)
+        #! self.main_layout.addWidget(self.keyframe_confining_widget)
+        # self.main_layout.addLayout(self.button_layout)
+        # self.main_layout.addWidget(self.dummy_button)
     
     def radiobutton_selection(self):
         """
@@ -188,7 +237,7 @@ class StretchingWidget(QDialog):
             int: ordinal number of selected radio button
         """
         selection_number = 1
-        if self.child_controller_radiobutton.isChecked() is True:
+        if self.main_toolbox.currentIndex() == 1:
             selection_number = 2
         return(int(selection_number))
     
@@ -236,21 +285,61 @@ class StretchingWidget(QDialog):
         for item in attrs_list:
             self.attribute_combobox.addItem(item)
     
-    def create_command(self):
-        """
-        Create Smear command bounded to the button
-        (can be defined as main connection with Utils)
-        """
-        demo_stretching_utils.get_values(
-            start_frame = self.start_frame_spinbox.value(),
-            end_frame = self.end_frame_spinbox.value(),
-            raw_squash_attribute = self.attribute_combobox.currentText(),
-            master_squash_attribute = self.selected_jnt_ctrl_layout.data_lineedit.text(),
-            multiplier = self.multiplier_doublespinbox.value(),
-            start_ctrl = self.start_jnt_controller_widget.data_lineedit.text(),
-            end_ctrl = self.end_jnt_controller_widget.data_lineedit.text(),
-            command_option = self.radiobutton_selection()
-            )
+    def delete_command(self):
+        if self.delete_current_command is None:
+            self.delete_current_command = DeleteSmearWindow()
+        
+        show_delete_miniwindow()
+
+
+class InfoInput(QWidget):
+    """
+    input mutiplier and start/end frame
+    """
+    def __init__(self, *args, **kwargs):
+        super(InfoInput, self).__init__(*args, **kwargs)
+
+        self.horizontal_spacer = QSpacerItem(20, 40, QSizePolicy.Expanding)
+
+        # ----------- MULTIPLIER & START/END FRAME WIDGET ------------ #
+        self.keyframe_confining_layout = QVBoxLayout()
+        self.multiplier_layout = QHBoxLayout()
+        self.setLayout(self.keyframe_confining_layout)
+
+        self.multiplier_label = QLabel("Multiplier:")
+        self.multiplier_doublespinbox = QDoubleSpinBox()
+        self.multiplier_doublespinbox.setValue(1.0)
+        self.multiplier_doublespinbox.setSingleStep(0.1)
+        self.multiplier_doublespinbox.setMaximum(100.0)
+
+        self.multiplier_layout.addWidget(self.multiplier_label)
+        self.multiplier_layout.addWidget(self.multiplier_doublespinbox)
+        self.multiplier_layout.addItem(self.horizontal_spacer)
+
+        self.keyframe_confining_layout.setContentsMargins(0, 0, 0, 0)
+        self.keyframe_confining_layout.setSpacing(1)
+
+        self.start_frame_layout = QHBoxLayout()
+        self.start_frame_label = QLabel("Start Frame:")
+        self.start_frame_spinbox = QSpinBox()
+        self.start_frame_spinbox.setMaximum(100000)
+
+        self.start_frame_layout.addWidget(self.start_frame_label)
+        self.start_frame_layout.addWidget(self.start_frame_spinbox)
+        self.start_frame_layout.addItem(self.horizontal_spacer)
+
+        self.end_frame_layout = QHBoxLayout()
+        self.end_frame_label = QLabel("End Frame: ")
+        self.end_frame_spinbox = QSpinBox()
+        self.end_frame_spinbox.setMaximum(100000)
+
+        self.end_frame_layout.addWidget(self.end_frame_label)
+        self.end_frame_layout.addWidget(self.end_frame_spinbox)
+        self.end_frame_layout.addItem(self.horizontal_spacer)
+
+        self.keyframe_confining_layout.addLayout(self.multiplier_layout)
+        self.keyframe_confining_layout.addLayout(self.start_frame_layout)
+        self.keyframe_confining_layout.addLayout(self.end_frame_layout)
 
 
 class GetInputLayout(QHBoxLayout):
@@ -274,6 +363,7 @@ class GetInputLayout(QHBoxLayout):
         self.data_label = QLabel(self.label)
         self.data_lineedit = QLineEdit()
         self.data_button = QPushButton(self.button_label)
+        self.data_button.setStyleSheet("background-color: #4d4d4d")
 
         self.addWidget(self.data_label)
         self.addWidget(self.data_lineedit)
@@ -287,6 +377,7 @@ class AttributeComboBox(QComboBox):
     """
     def __init__(self, parent=None):
         super(AttributeComboBox, self).__init__(parent)
+        self.setStyleSheet("background-color: #323232")
         # self.attributes = attributes
     
     # def add_item(self)
@@ -296,11 +387,12 @@ class AttributeComboBox(QComboBox):
 
 class ChildControllerListWidget(QListWidget):
     """
-    interactive ListWidget for showing main controller"s children
+    interactive ListWidget for showing main controller's children
     """
     def __init__(self, *args, **kwargs):
         super(ChildControllerListWidget, self).__init__(*args, **kwargs)
         self.item_list = []
+        # self.item_object_list = []
 
     def get_hierarchy(self, start, end):
         """
@@ -310,12 +402,40 @@ class ChildControllerListWidget(QListWidget):
             start (str): start joint controller
             end (str): end joint controller
         """
+        if self.count() > 0:
+            self.clear_item()
         test_stringlist = demo_stretching_utils.get_ctrl_hierarchy(start, end)
         for nametest in test_stringlist:
                 item = ChildControllerListWidgetItem(nametest)
+                self.indexFromItem(item)
 
                 self.addItem(item)
+                # self.item_object_list.append(item)
                 self.item_list.append(item.item_name())
+    
+    def clear_item(self):
+        self.clear()
+        self.item_list.clear()
+    
+    def add_new_item(self):
+        objs_name = object_query_command()
+        for member in objs_name:
+            item = ChildControllerListWidgetItem(member)
+            self.indexFromItem(item)
+
+            self.addItem(item)
+            self.item_list.append(member)
+
+    
+    def delete_current_index(self):
+        current_item = self.selectedItems()
+        self.item_list.remove(current_item[0].item_name())
+        # print(self.item_list)
+        self.takeItem(self.currentRow())
+    
+    def return_item_list(self):
+        print(self.item_list)
+        return(self.item_list)
     
     #! WIP (in case needed to list all item in the widget at the time)
     def return_item_string(self):
@@ -353,17 +473,40 @@ class ChildControllerListWidgetItem(QListWidgetItem):
         return(self.child_node)
 
 
-#! WIP
-class GhostingWidget(QDialog):
+class GhostingWidget(QWidget):
     """
     Ghosting feature widget
     """
     def __init__(self, *args, **kwargs):
         super(GhostingWidget, self).__init__(*args, **kwargs)
+        self.main_layout = QVBoxLayout()
+        self.setLayout(self.main_layout)
+
+        self.spacer = QSpacerItem(20, 40, QSizePolicy.Minimum, QSizePolicy.Expanding)
+        self.horizontal_spacer = QSpacerItem(20, 40, QSizePolicy.Expanding)
+
+        self.bake_layout = QHBoxLayout()
+        self.bake_label = QLabel("Initiate Bake Object")
+        self.duplicate_obj_button = QPushButton("Select object")
+        #! WIP
+        # self.duplicate_obj_button.clicked.connect(self.select_obj_command)
+        self.bake_from_faces_button = QPushButton("Bake from faces")
+
+        self.bake_layout.addWidget(self.bake_label)
+        self.bake_layout.addWidget(self.duplicate_obj_button)
+        self.bake_layout.addWidget(self.bake_from_faces_button)
+        self.bake_layout.addItem(self.horizontal_spacer)
+
+        self.main_layout.addLayout(self.bake_layout)
+        self.main_layout.addItem(self.spacer)
+    
+    def select_obj_command(self):
+        obj = object_query_command()
+        ghostingIntervalsmear.duplicate_geo_for_selecting_faces(raw_selection_group=obj)
 
 
 #! WIP
-class BlendingWidget(QDialog):
+class BlendingWidget(QWidget):
     """
     Blending feature widget
     """
@@ -371,7 +514,33 @@ class BlendingWidget(QDialog):
         super(BlendingWidget, self).__init__(*args, **kwargs)
 
 
-def object_query_command(quantity="single"):
+class DeleteSmearWindow(QDialog):
+    """
+    Delete Button's separated option window
+    """
+    def __init__(self, *args, **kwargs):
+        super(DeleteSmearWindow, self).__init__(*args, **kwargs)
+        self.setFixedSize(QSize(320, 100))
+        self.main_layout = QVBoxLayout()
+        self.setLayout(self.main_layout)
+        self.setWindowTitle("Warning: Multiple smears")
+
+        self.main_label = QLabel(
+            "More than one Autosmear frame have been created. \n Do you want to delete the current frame?")
+        self.buttons_layout = QHBoxLayout()
+        self.open_history = QPushButton("Open History")
+        self.delete_current = QPushButton("Delete Current Smear")
+        self.close = QPushButton("Close")
+
+        self.buttons_layout.addWidget(self.open_history)
+        self.buttons_layout.addWidget(self.delete_current)
+        self.buttons_layout.addWidget(self.close)
+        
+        self.main_layout.addWidget(self.main_label)
+        self.main_layout.addLayout(self.buttons_layout)
+
+
+def object_query_command(quantity=""):
     """
     function that returns selected
     this function can returns various type of variable depends on input argument
@@ -418,6 +587,19 @@ def attributes_query_command(name=""):
     user_defined_attribute = tmp_list
     print(user_defined_attribute)
     return user_defined_attribute
+
+def show_delete_miniwindow():
+	maya_ptr = omui.MQtUtil.mainWindow()
+	ptr = wrapInstance(int(maya_ptr), QWidget)
+
+	global ui_miniwindow
+	try:
+		ui_miniwindow.close()
+	except:
+		pass
+
+	ui_miniwindow = DeleteSmearWindow(parent=ptr)
+	ui_miniwindow.show()
 
 
 def run():
