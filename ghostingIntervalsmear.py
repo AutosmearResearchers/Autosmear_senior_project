@@ -144,8 +144,13 @@ def get_values(
 ############################################################################
 
     #! create history dict and record history of smear
+    order_num = 1
+    last_history = cmds.listAttr("smear_history_grp", ud=True)
+    if last_history is not None:
+        if len(last_history) > 0:
+            order_num = int((last_history[-1]).split("_s")[1]) + 1
     history_dict = "{frame}||{ghost_grp}".format(frame=start_frame, ghost_grp=group_name)
-    attr_naming = "ghosting_{keyframe}_{group}".format(group= group_name,keyframe=start_frame)
+    attr_naming = "ghosting_s{order}".format(order= order_num)
 
     cmds.addAttr("smear_history_grp", ln=attr_naming, dt="string")
     cmds.setAttr("smear_history_grp.{attr_name}".format(attr_name = attr_naming), history_dict, type="string", lock = True)
