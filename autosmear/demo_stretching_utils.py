@@ -32,6 +32,7 @@ def get_values(
     """
     
     #todo check if user choose based on attribute or controller
+    print(smear_option)
     if command_option == 2:
         #! using function to get the hierarchy of the ctrl
         # ctrl_hierarchy = get_ctrl_hierarchy(start_ctrl,end_ctrl)
@@ -213,15 +214,7 @@ def calculate_custom_smear(custom_frame=1):
     """  
      return [custom_frame]
 
-def stretch_ctrl(start_frame=1,end_frame=1,smear_frames = [],ctrl_hierarchy = [],multiplier = 1.0):    
-    """
-    stretch_ctrl
-
-    Args:
-        smear_frames (list): calculated frames that smear will be created on
-        ctrl_hierarchy (list): list of hierarchical controller
-        multiplier (float): value used to increase the strength of the smear
-    """
+def stretch_ctrl(start_frame=1,end_frame=1,smear_frames = [],ctrl_hierarchy = [],multiplier = 1.0):
     number_of_ctrl = len(ctrl_hierarchy)
     locator_list = []
     used_ctrl=[]
