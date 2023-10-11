@@ -59,7 +59,7 @@ def calculate_velocity(start_frame=1,end_frame=1,ctrl_hierarchy=[]):
         #todo finding position vector of the main_ctrl for each frame
         cmds.currentTime(frame_number)
         pos_vector = np.array(cmds.xform(main_ctrl,query=True,translation=True,worldSpace=True))
-        print(cmds.xform(main_ctrl,query=True,translation=True,worldSpace=True))
+        # print(cmds.xform(main_ctrl,query=True,translation=True,worldSpace=True))
         pos_list.append(pos_vector)
         
         #todo Since, s = pos_list[n] - pos_list[n-1] ==> at n = 0; s = pos_list[0] - 0 
@@ -169,7 +169,8 @@ def get_values(
     main_ctrl=[],
     interval = 1,
     custom_frame = 1,
-    smear_option = 1):
+    smear_option = 1,
+    visibility_keyframe = 2):
     '''
     main function for proceeding ghosting smear feature
 
@@ -177,6 +178,7 @@ def get_values(
         start_frame (int): start keyframe
         end_frame (int): end keyframe
         main_ctrl (list): the list of controller that moves so, to calculate its velocity.
+        visibility_keyframe (int): number of frame the ghost should be visible
     '''
     #todo read the text file containing the face_ID ghosting data
     path = get_current_maya_file_path(True)
@@ -220,10 +222,23 @@ def get_values(
             cmds.currentTime(current_frame)
             #!duplicate the geometry 
             duplicate_geo_name = duplicate_geometry(original_geo_name)
+            
+            #!keyframe the visibility of the ghost to be 0 from zero to current frame
+            cmds.currentTime(0)
+            cmds.setKeyframe(duplicate_geo_name, attribute='visibility', time=0, value=0)
+            cmds.currentTime(current_frame)
+
+            #!keyframe the visibility of the ghost to be 1
+            cmds.setKeyframe(duplicate_geo_name, attribute='visibility', time=current_frame, value=1)
+
             ghosting_geo_list.append(duplicate_geo_name)
             #!remove all the unselected face for that geometry
             if face_ID_list is not []:    
-                remove_non_selected_faces(duplicate_geo_name,face_ID_list)    
+                remove_non_selected_faces(duplicate_geo_name,face_ID_list)
+            
+            #!after visible frame inputed by the user, keyframe the visibility of the ghost to 0 
+            cmds.currentTime(current_frame+visibility_keyframe)
+            cmds.setKeyframe(duplicate_geo_name, attribute='visibility', time=current_frame+visibility_keyframe, value=0)
     
     grouping = cmds.group(ghosting_geo_list,name = 'ghosting_Grp')
     group_name = cmds.ls(grouping)[0]
@@ -272,3 +287,4 @@ def remove_non_selected_faces(ghosting_name = '',face_ID_list = []):
         all_delete_face.append(ghosting_name+each_face)
 
     cmds.polyDelFacet(all_delete_face)
+
