@@ -169,7 +169,8 @@ def get_values(
     main_ctrl=[],
     interval = 1,
     custom_frame = 1,
-    smear_option = 1):
+    smear_option = 1,
+    visibility_keyframe = 2):
     '''
     main function for proceeding ghosting smear feature
 
@@ -177,6 +178,7 @@ def get_values(
         start_frame (int): start keyframe
         end_frame (int): end keyframe
         main_ctrl (list): the list of controller that moves so, to calculate its velocity.
+        visibility_keyframe (int): number of frame the ghost should be visible
     '''
     #todo read the text file containing the face_ID ghosting data
     path = get_current_maya_file_path(True)
@@ -220,10 +222,23 @@ def get_values(
             cmds.currentTime(current_frame)
             #!duplicate the geometry 
             duplicate_geo_name = duplicate_geometry(original_geo_name)
+            
+            #!keyframe the visibility of the ghost to be 0 from zero to current frame
+            cmds.currentTime(0)
+            cmds.setKeyframe(duplicate_geo_name, attribute='visibility', time=0, value=0)
+            cmds.currentTime(current_frame)
+
+            #!keyframe the visibility of the ghost to be 1
+            cmds.setKeyframe(duplicate_geo_name, attribute='visibility', time=current_frame, value=1)
+
             ghosting_geo_list.append(duplicate_geo_name)
             #!remove all the unselected face for that geometry
             if face_ID_list is not []:    
-                remove_non_selected_faces(duplicate_geo_name,face_ID_list)    
+                remove_non_selected_faces(duplicate_geo_name,face_ID_list)
+            
+            #!after visible frame inputed by the user, keyframe the visibility of the ghost to 0 
+            cmds.currentTime(current_frame+visibility_keyframe)
+            cmds.setKeyframe(duplicate_geo_name, attribute='visibility', time=current_frame+visibility_keyframe, value=0)
     
     grouping = cmds.group(ghosting_geo_list,name = 'ghosting_Grp')
     group_name = cmds.ls(grouping)[0]
@@ -233,16 +248,29 @@ def get_values(
 
 ############################################################################    
     #NOTE: Creation of Clear Smear for testing purpose ONLY
-    if not cmds.objExists("smear_history_grp"):
-        cmds.group(em=True, name="smear_history_grp")
+    # if not cmds.objExists("smear_history_grp"):
+    #     cmds.group(em=True, name="smear_history_grp")
 ############################################################################
 
     #! create history dict and record history of smear
-    history_dict = "{frame}||{ghost_grp}".format(frame=start_frame, ghost_grp=group_name)
-    attr_naming = "ghosting_{keyframe}_{group}".format(group= group_name,keyframe=start_frame)
+    order_num = 1
+    smear_count_list = []
+    last_history = cmds.listAttr("persp", ud=True)
 
-    cmds.addAttr("smear_history_grp", ln=attr_naming, dt="string")
-    cmds.setAttr("smear_history_grp.{attr_name}".format(attr_name = attr_naming), history_dict, type="string", lock = True)
+    if last_history is not None:
+        if len(last_history) > 0:
+            for each_smear in last_history:
+                if each_smear.split("_s")[0] == "ghosting":
+                    smear_count_list.append(each_smear)
+
+            if len(smear_count_list) > 0:
+                order_num = int((smear_count_list[-1]).split("_s")[1]) + 1
+
+    history_dict = "{frame}||{ghost_grp}".format(frame=start_frame, ghost_grp=group_name)
+    attr_naming = "ghosting_s{order}".format(order=order_num)
+
+    cmds.addAttr("persp", ln=attr_naming, dt="string")
+    cmds.setAttr("persp.{attr_name}".format(attr_name = attr_naming), history_dict, type="string", lock = True)
 
 def duplicate_geometry(ghosting_object=''):
     '''
@@ -272,3 +300,4 @@ def remove_non_selected_faces(ghosting_name = '',face_ID_list = []):
         all_delete_face.append(ghosting_name+each_face)
 
     cmds.polyDelFacet(all_delete_face)
+

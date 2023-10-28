@@ -44,7 +44,7 @@ def get_values(
         else:
              smear_frame = calculate_custom_smear(custom_frame)     #custom smear
         #! using function to keyframe the stretch smear effect (by ctrl)
-        stretch_ctrl(start_frame,end_frame,smear_frame,ctrl_hierarchy,multiplier)
+        stretch_ctrl(start_frame,end_frame,start_ctrl,smear_frame,ctrl_hierarchy,multiplier)
 
     else:
         tmp_attr_list = []
@@ -214,10 +214,10 @@ def calculate_custom_smear(custom_frame=1):
     """  
      return [custom_frame]
 
-def stretch_ctrl(start_frame=1,end_frame=1,smear_frames = [],ctrl_hierarchy = [],multiplier = 1.0):
+def stretch_ctrl(start_frame=1,end_frame=1,start_ctrl="",smear_frames = [],ctrl_hierarchy = [],multiplier = 1.0):
     number_of_ctrl = len(ctrl_hierarchy)
     locator_list = []
-    used_ctrl=[]
+    used_ctrl=[start_ctrl]
     for smear_frame in smear_frames:
         for number in range(1,number_of_ctrl):
             #todo keyframe start/end frame first!
@@ -253,14 +253,21 @@ def stretch_ctrl(start_frame=1,end_frame=1,smear_frames = [],ctrl_hierarchy = []
 
     #! create history dict and record history of smear
     order_num = 1
-    last_history = cmds.listAttr("smear_history_grp", ud=True)
+    smear_count_list = []
+    last_history = cmds.listAttr("persp", ud=True)
+
     if last_history is not None:
         if len(last_history) > 0:
-            order_num = int((last_history[-1]).split("_s")[1]) + 1
+            for each_smear in last_history:
+                if each_smear.split("_s")[0] == "stretching":
+                    smear_count_list.append(each_smear)
+
+            if len(smear_count_list) > 0:
+                order_num = int((smear_count_list[-1]).split("_s")[1]) + 1
 
     history_dict = "{frame}||{ctrl}".format(frame=used_frame, ctrl=used_ctrl)
     attr_naming = "stretching_s{order}".format(order=order_num)
 
-    cmds.addAttr("smear_history_grp", ln=attr_naming, dt="string")
-    cmds.setAttr("smear_history_grp.{attr_name}".format(attr_name = attr_naming), history_dict, type="string", lock = True)
+    cmds.addAttr("persp", ln=attr_naming, dt="string")
+    cmds.setAttr("persp.{attr_name}".format(attr_name = attr_naming), history_dict, type="string", lock = True)
 
