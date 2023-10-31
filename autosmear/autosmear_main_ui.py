@@ -40,6 +40,7 @@ class MainWidget(QMainWindow):
 
         self.stretching_feature = StretchingWidget()
         self.ghosting_feature = GhostingWidget()
+        self.blending_feature = BlendingWidget()
         self.infoinput = InfoInput()
         self.attribute_combobox = AttributeComboBox()
         self.hierawid = ChildControllerListWidget()
@@ -87,7 +88,7 @@ class MainWidget(QMainWindow):
 
         self.feature_tab_widget.addTab(self.stretching_feature,"Stretching")
         self.feature_tab_widget.addTab(self.ghosting_feature,"Ghosting")
-        self.feature_tab_widget.addTab(BlendingWidget(),"Blending")
+        self.feature_tab_widget.addTab(self.blending_feature,"Blending")
 
         self.feature_tab_widget.currentChanged.connect(self.current_tab)
         self.stretching_feature.main_toolbox.currentChanged.connect(self.stretching_current_tab)
@@ -163,13 +164,9 @@ class MainWidget(QMainWindow):
         self.radiobutton_grid_layout.addWidget(self.autosmear_radiobutton, 0, 0)
         self.radiobutton_grid_layout.addWidget(self.interval_radiobutton, 1, 0)
         self.radiobutton_grid_layout.addWidget(self.interval_spinbox, 1, 1)
-        self.radiobutton_grid_layout.addWidget(self.interval_vis_duration_label, 2, 0)
-        self.radiobutton_grid_layout.addWidget(self.interval_vis_duration_spinbox, 2, 1)
-        self.radiobutton_grid_layout.addWidget(self.interval_vis_duration_end_label, 2, 2)
-        self.radiobutton_grid_layout.addWidget(self.custom_smear_radiobutton, 3, 0)
-        self.radiobutton_grid_layout.addWidget(self.custom_smear_spinbox, 3, 1)
-        self.radiobutton_grid_layout.addWidget(self.custom_smear_button, 3, 2)
-
+        self.radiobutton_grid_layout.addWidget(self.custom_smear_radiobutton, 2, 0)
+        self.radiobutton_grid_layout.addWidget(self.custom_smear_spinbox, 2, 1)
+        self.radiobutton_grid_layout.addWidget(self.custom_smear_button, 2, 2)
 
         # ----------- ADD FRAME ------------ #
         self.frame_widget = QWidget()
@@ -221,9 +218,6 @@ class MainWidget(QMainWindow):
         can be switched with other main features' create command
         """
         #! Creation of Clear Smear
-        # if not cmds.objExists("smear_history_grp"):
-        #     cmds.group(em=True, name="smear_history_grp")
-        
         if self.feature_tab_widget.currentIndex() == 0:
             demo_stretching_utils.get_values(
             start_frame = self.infoinput.start_frame_spinbox.value(),
@@ -240,14 +234,19 @@ class MainWidget(QMainWindow):
             smear_option = self.radiobutton_selection()
             )
         elif self.feature_tab_widget.currentIndex() == 1:
+            type_selection = self.radiobutton_selection()
+            auto_main_ctrl = self.ghosting_feature.main_ctrl_layout.data_lineedit.text()
+            if type_selection == 1 and auto_main_ctrl == "":
+                logger.error("No controller has been selected for Auto-smear creation.")
+                return
             demo_ghosting_utils.get_values(
             start_frame = self.infoinput.start_frame_spinbox.value(),
             end_frame = self.infoinput.end_frame_spinbox.value(),
-            main_ctrl = [self.ghosting_feature.main_ctrl_layout.data_lineedit.text()],
+            main_ctrl = [auto_main_ctrl],
             interval = self.interval_spinbox.value(),
             custom_frame = self.custom_smear_spinbox.value(),
-            smear_option = self.radiobutton_selection(),
-            visibility_keyframe = self.interval_vis_duration_spinbox.value()
+            smear_option = type_selection,
+            visibility_keyframe = self.ghosting_feature.vis_duration_spinbox.value()
             )
         else:
             print("NO TASK")
@@ -633,15 +632,15 @@ class AttributeComboBox(QComboBox):
     #         self.addItem(member)
 
 
-class GhostFaceListWidget(QListWidget):
+class CustomListWidget(QListWidget):
     """
     interactive ListWidget for showing main controller's children
     """
     def __init__(self, *args, **kwargs):
-        super(GhostFaceListWidget, self).__init__(*args, **kwargs)
+        super(CustomListWidget, self).__init__(*args, **kwargs)
         self.item_list = []
     
-    def get_faces_obj_name(self, obj_name="None"):
+    def get_obj_name(self, obj_name="None"):
         item = ChildControllerListWidgetItem(obj_name)
         self.indexFromItem(item)
         self.addItem(item)
@@ -744,12 +743,14 @@ class GhostingWidget(QWidget):
         self.main_layout = QVBoxLayout()
         self.setLayout(self.main_layout)
 
-        self.ghost_list = GhostFaceListWidget()
+        self.ghost_list = CustomListWidget()
         self.main_ctrl_layout= GetInputLayout(label="Start controller:")
         self.main_ctrl_layout.data_button.clicked.connect(self.set_main_ctrl_text_command)
 
         self.spacer = QSpacerItem(20, 150, QSizePolicy.Minimum, QSizePolicy.Expanding)
         self.horizontal_spacer = QSpacerItem(20, 40, QSizePolicy.Expanding)
+
+        self.tutorial_label = QLabel("1) Select faces to create Ghosting and configure duration:")
 
         self.bake_layout = QHBoxLayout()
         self.bake_label = QLabel("Initiate Bake Object")
@@ -762,16 +763,30 @@ class GhostingWidget(QWidget):
         self.bake_layout.addWidget(self.duplicate_obj_button)
         self.bake_layout.addItem(self.horizontal_spacer)
 
+        self.vis_duration_layout = QHBoxLayout()
+        self.vis_duration_label = QLabel("Ghosting visibility duration:")
+        self.vis_duration_end_label = QLabel("frame")
+        self.vis_duration_spinbox = QSpinBox()
+        self.vis_duration_spinbox.setValue(1)
+        self.vis_duration_spinbox.setMaximum(100000)
+
+        self.vis_duration_layout.addWidget(self.vis_duration_label)
+        self.vis_duration_layout.addWidget(self.vis_duration_spinbox)
+        self.vis_duration_layout.addWidget(self.vis_duration_end_label)
+        self.vis_duration_layout.addItem(self.horizontal_spacer)
+
+        self.main_layout.addWidget(self.tutorial_label)
         self.main_layout.addLayout(self.bake_layout)
         self.main_layout.addLayout(self.main_ctrl_layout)
         self.main_layout.addWidget(self.faces_label)
         self.main_layout.addWidget(self.ghost_list)
+        self.main_layout.addLayout(self.vis_duration_layout)
         self.main_layout.addItem(self.spacer)
     
     def bake_obj_command(self):
         obj = object_query_command()
         demo_ghosting_utils.get_ghost_object_face_ID(selected_faces=obj)
-        self.ghost_list.get_faces_obj_name((obj[0]).split(".")[0])
+        self.ghost_list.get_obj_name((obj[0]).split(".")[0])
     
     def set_main_ctrl_text_command(self):
         """
@@ -791,6 +806,35 @@ class BlendingWidget(QWidget):
     """
     def __init__(self, *args, **kwargs):
         super(BlendingWidget, self).__init__(*args, **kwargs)
+        self.blending_main_layout = QVBoxLayout()
+        self.setLayout(self.blending_main_layout)
+        self.spacer = QSpacerItem(20, 150, QSizePolicy.Minimum, QSizePolicy.Expanding)
+        self.horizontal_spacer = QSpacerItem(20, 40, QSizePolicy.Expanding)
+        
+        self.tutorial_label = QLabel("1) Choose Ghostiong geo to create Blending smear:")
+
+        self.bake_ghost_layout = QHBoxLayout()
+        self.bake_ghost_label = QLabel("Bake Ghosting geo")
+        self.bake_ghost_button = QPushButton("Bake selection")
+        self.bake_ghost_button.clicked.connect(self.bake_obj_command)
+
+        self.bake_ghost_layout.addWidget(self.bake_ghost_label)
+        self.bake_ghost_layout.addWidget(self.bake_ghost_button)
+        self.bake_ghost_layout.addItem(self.horizontal_spacer)
+
+        self.ghosting_geo_label = QLabel("Related Ghosting geo:")
+        self.ghosting_geo_list = CustomListWidget()
+
+        self.blending_main_layout.addWidget(self.tutorial_label)
+        self.blending_main_layout.addLayout(self.bake_ghost_layout)
+        self.blending_main_layout.addWidget(self.ghosting_geo_label)
+        self.blending_main_layout.addWidget(self.ghosting_geo_list)
+        self.blending_main_layout.addItem(self.spacer)
+    
+    def bake_obj_command(self):
+        obj = object_query_command()
+        for member in obj:
+            self.ghosting_geo_list.get_obj_name(member)
 
 
 class DeleteSmearWindow(QDialog):
