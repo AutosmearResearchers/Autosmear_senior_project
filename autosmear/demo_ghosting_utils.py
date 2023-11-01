@@ -158,13 +158,9 @@ def clear_face_ID_data():
         None
     '''
     path = get_current_maya_file_path(True)
-    full_path = '{path}collection_face_ID.txt'.format(path=path)
-    if os.path.exists(full_path):
-        clear_file = open(full_path, 'w')
-        clear_file.close()
-    else:
-        print("wth???")
-        return
+
+    clear_file = open('{path}collection_face_ID.txt'.format(path=path),'w')
+    clear_file.close()
 
 
 def get_values(
@@ -201,9 +197,10 @@ def get_values(
         smear_frames = get_custom_smear_frame(custom_frame)
 
     ghosting_geo_list = []  #? a list stored all the ghosting geometry generated
-
+    
     #todo transversing through each object face_ID 
     for each_ghost_geo in ghosting_lst:
+        each_ghost_geo_List = []    #? a list used for grouping each generated ghosting object
         first_element = each_ghost_geo[0] #eg. jecket_Geo.f[3280]
 
         #todo check wether the current elemeny contains the face ID or the entire geometry
@@ -226,6 +223,7 @@ def get_values(
             cmds.currentTime(current_frame)
             #!duplicate the geometry 
             duplicate_geo_name = duplicate_geometry(original_geo_name)
+            each_ghost_geo_List.append(duplicate_geo_name)
             
             #!keyframe the visibility of the ghost to be 0 from zero to current frame
             cmds.currentTime(0)
@@ -244,11 +242,41 @@ def get_values(
             cmds.currentTime(current_frame+visibility_keyframe)
             cmds.setKeyframe(duplicate_geo_name, attribute='visibility', time=current_frame+visibility_keyframe, value=0)
     
+    #!grouping individual ghost geometry
     grouping = cmds.group(ghosting_geo_list,name = 'AutoSmear_Ghosting_Grp_001')
     group_name = cmds.ls(grouping)[0]
 
+    #!create each individual grouping
+    all_ghosting_component = cmds.listRelatives(group_name)
+    number_of_ghost_sub_grp = len(smear_frames)
+
+    keyword = ''
+    for each_ghost_geo in range(1,number_of_ghost_sub_grp+1):
+        #! adding padding
+        if len(str(each_ghost_geo)) == 1:
+            keyword = '00' + str(each_ghost_geo)
+        elif len(str(each_ghost_geo)) == 2:
+            keyword = '0' + str(each_ghost_geo)
+        else:
+            keyword = str(each_ghost_geo)
+        
+        #! find the matching keyword and group
+        individual_group = []
+        for each_ghost_component in all_ghosting_component:
+            if keyword in each_ghost_component:
+                individual_group.append(each_ghost_component)
+        
+        current_frame = each_ghost_geo - 1
+        cmds.currentTime(current_frame)
+        sub_grp_name = cmds.group(individual_group,name = 'Ghosting_SubGrp_001')
+        
+        #!adjust pivot of the ghosting group !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+        object_world_rotation = cmds.xform(main_ctrl[0],query = True,rotation = True,worldSpace = True)
+        cmds.select(sub_grp_name)
+        cmds.manipPivot(o=object_world_rotation)
+
     #!clear the text file after smear is complete
-    # clear_face_ID_data()
+    clear_face_ID_data()
 
 ############################################################################    
     #NOTE: Creation of Clear Smear for testing purpose ONLY
@@ -259,23 +287,22 @@ def get_values(
     #! create history dict and record history of smear
     order_num = 1
     smear_count_list = []
-    # last_history = cmds.listAttr("persp", ud=True)
+    last_history = cmds.listAttr("persp", ud=True)
 
-    # if last_history is not None:
-    #     if len(last_history) > 0:
-    #         for each_smear in last_history:
-    #             if each_smear.split("_s")[0] == "ghosting":
-    #                 smear_count_list.append(each_smear)
+    if last_history is not None:
+        if len(last_history) > 0:
+            for each_smear in last_history:
+                if each_smear.split("_s")[0] == "ghosting":
+                    smear_count_list.append(each_smear)
 
-    #         if len(smear_count_list) > 0:
-    #             order_num = int((smear_count_list[-1]).split("_s")[1]) + 1
+            if len(smear_count_list) > 0:
+                order_num = int((smear_count_list[-1]).split("_s")[1]) + 1
 
     history_dict = "{frame}||{ghost_grp}".format(frame=start_frame, ghost_grp=group_name)
     attr_naming = "ghosting_s{order}".format(order=order_num)
 
-    #! EDIT: keep history attr in the ghosting_grp itself
-    cmds.addAttr(group_name, ln="smear_history", dt="string")
-    cmds.setAttr("{grp}.{attr_name}".format(grp=group_name, attr_name = "smear_history"), history_dict, type="string", lock = True)
+    cmds.addAttr("persp", ln=attr_naming, dt="string")
+    cmds.setAttr("persp.{attr_name}".format(attr_name = attr_naming), history_dict, type="string", lock = True)
 
 def duplicate_geometry(ghosting_object=''):
     '''
@@ -288,7 +315,7 @@ def duplicate_geometry(ghosting_object=''):
     '''
     
     #todo duplicate the entire geometry
-    new_name = '{ghost_name}__Autosmear_ghost_obj'.format(ghost_name=ghosting_object)
+    new_name = '{ghost_name}__Autosmear_ghost_obj_001'.format(ghost_name=ghosting_object)
     duplicate_geo = cmds.duplicate(ghosting_object,name = new_name)
     cmds.parent(duplicate_geo,world=True)
 
