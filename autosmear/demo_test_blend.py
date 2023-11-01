@@ -45,6 +45,7 @@ def create_lattice_from_selected_ghost(ghosting_group=[],lattice_division = [4,2
 
     #todo create lattice base 
     for each_ghost_ID,each_ghost in enumerate(ghosting_group):
+        print(each_ghost)
         lattice_elements_list = cmds.lattice(each_ghost,divisions = lattice_division, 
                                              objectCentered = True,
                                              commonParent=True,
