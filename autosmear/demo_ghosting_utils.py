@@ -197,9 +197,10 @@ def get_values(
         smear_frames = get_custom_smear_frame(custom_frame)
 
     ghosting_geo_list = []  #? a list stored all the ghosting geometry generated
-
+    
     #todo transversing through each object face_ID 
     for each_ghost_geo in ghosting_lst:
+        each_ghost_geo_List = []    #? a list used for grouping each generated ghosting object
         first_element = each_ghost_geo[0] #eg. jecket_Geo.f[3280]
 
         #todo check wether the current elemeny contains the face ID or the entire geometry
@@ -222,6 +223,7 @@ def get_values(
             cmds.currentTime(current_frame)
             #!duplicate the geometry 
             duplicate_geo_name = duplicate_geometry(original_geo_name)
+            each_ghost_geo_List.append(duplicate_geo_name)
             
             #!keyframe the visibility of the ghost to be 0 from zero to current frame
             cmds.currentTime(0)
@@ -240,8 +242,31 @@ def get_values(
             cmds.currentTime(current_frame+visibility_keyframe)
             cmds.setKeyframe(duplicate_geo_name, attribute='visibility', time=current_frame+visibility_keyframe, value=0)
     
-    grouping = cmds.group(ghosting_geo_list,name = 'ghosting_Grp')
+    #!grouping individual ghost geometry
+    grouping = cmds.group(ghosting_geo_list,name = 'AutoSmear_Ghosting_Grp_001')
     group_name = cmds.ls(grouping)[0]
+
+    #!create each individual grouping
+    all_ghosting_component = cmds.listRelatives(group_name)
+    number_of_ghost_sub_grp = len(smear_frames)
+
+    keyword = ''
+    for each_ghost_geo in range(1,number_of_ghost_sub_grp+1):
+        #! adding padding
+        if len(str(each_ghost_geo)) == 1:
+            keyword = '00' + str(each_ghost_geo)
+        elif len(str(each_ghost_geo)) == 2:
+            keyword = '0' + str(each_ghost_geo)
+        else:
+            keyword = str(each_ghost_geo)
+        
+        #! find the matching keyword and group
+        individual_group = []
+        for each_ghost_component in all_ghosting_component:
+            if keyword in each_ghost_component:
+                individual_group.append(each_ghost_component)
+        
+        cmds.group(individual_group,name = 'Ghosting_SubGrp_001')
 
     #!clear the text file after smear is complete
     clear_face_ID_data()
@@ -283,7 +308,7 @@ def duplicate_geometry(ghosting_object=''):
     '''
     
     #todo duplicate the entire geometry
-    new_name = '{ghost_name}__Autosmear_ghost_obj'.format(ghost_name=ghosting_object)
+    new_name = '{ghost_name}__Autosmear_ghost_obj_001'.format(ghost_name=ghosting_object)
     duplicate_geo = cmds.duplicate(ghosting_object,name = new_name)
     cmds.parent(duplicate_geo,world=True)
 
