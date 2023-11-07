@@ -249,6 +249,7 @@ def get_values(
 
     #!create each individual grouping
     all_ghosting_component = cmds.listRelatives(group_name)
+    print(all_ghosting_component)
     number_of_ghost_sub_grp = len(smear_frames)
 
     keyword = ''

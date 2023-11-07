@@ -24,9 +24,11 @@ logger.setLevel(logging.DEBUG)
 from autosmear import demo_stretching_utils
 reload(demo_stretching_utils)
 
-#! WIP
 from autosmear import demo_ghosting_utils
 reload(demo_ghosting_utils)
+
+from autosmear import demo_test_blend
+reload(demo_test_blend)
 
 class MainWidget(QMainWindow):
     """
@@ -207,9 +209,6 @@ class MainWidget(QMainWindow):
 
         self.setLayout(self.main_layout)
     
-    def test_print(self):
-        print("OK")
-    
     def create_command(self):
         """
         Create Smear command bounded to the button
@@ -248,24 +247,16 @@ class MainWidget(QMainWindow):
             smear_option = type_selection,
             visibility_keyframe = self.ghosting_feature.vis_duration_spinbox.value()
             )
+        elif self.feature_tab_widget.currentIndex() == 2:
+            ghosting_geo_name_list = []
+            ghosting_geo_name_list = (self.blending_feature.ghosting_geo_list.return_item_list())
+            lattice_dict = demo_test_blend.create_lattice_from_selected_ghost(ghosting_group=ghosting_geo_name_list,lattice_division = [4,3,3])
+            cluster_grp_lst = demo_test_blend.create_clusters_on_lattice(lattice_edge_loop_dict = lattice_dict)
+            demo_test_blend.snap_controllers_on_cluster(locator_group_list = cluster_grp_lst)
         else:
             print("NO TASK")
-    
-    # def clear_command(self):
-    #     attr_name = cmds.listAttr("smear_history_grp", ud=True)[0]
-    #     smear_history = "smear_history_grp.{attr}".format(attr=attr_name)
-    #     history_dict = cmds.getAttr(smear_history)
-    #     split_history_dict = history_dict.split("||")
-    #     converted_keyframe_list = ast.literal_eval(split_history_dict[1])
-    #     current_time = int(split_history_dict[0])
-
-    #     for member in converted_keyframe_list:
-    #         cmds.cutKey( member, time=(current_time,current_time), option="keys", clear=True )
-        
-    #     cmds.setAttr(smear_history, lock=False)
-    #     cmds.deleteAttr("smear_history_grp", at=attr_name)
-    #     cmds.delete(
-    #         "{last_ctrl}_autoSmearTool_LOC_grp".format(last_ctrl=converted_keyframe_list[-1]))
+        # if table_window.isVisible() is True:
+        #     #! update at the time
     
     def radiobutton_selection(self):
         """
@@ -295,10 +286,9 @@ class MainWidget(QMainWindow):
         if self.feature_tab_widget.currentIndex() == 0:
             if self.stretching_feature.main_toolbox.currentIndex() == 0:
                 self.create_button.setText("Create Attribute Stretching")
-                self.delete_button.setText("Delete Attribute Stretching")
             else:
                 self.create_button.setText("Create Controller Stretching")
-                self.delete_button.setText("Delete Controller Stretching")
+            self.delete_button.setText("Delete Stretching")
             self.current_tab_color(0)
         elif self.feature_tab_widget.currentIndex() == 1:
             self.create_button.setText("Create Ghosting")
@@ -353,10 +343,9 @@ class MainWidget(QMainWindow):
     def stretching_current_tab(self):
         if self.stretching_feature.main_toolbox.currentIndex() == 0:
             self.create_button.setText("Create Attribute Stretching")
-            self.delete_button.setText("Delete Attribute Stretching")
         else:
             self.create_button.setText("Create Controller Stretching")
-            self.delete_button.setText("Delete Controller Stretching")
+        # self.delete_button.setText("Delete Stretching")
     
     def default_connection(self):
         if self.autosmear_radiobutton.isChecked() is True:
@@ -392,14 +381,30 @@ class MainWidget(QMainWindow):
     def delete_command(self):
         # if self.delete_current_command is None:
         #     self.delete_current_command = DeleteSmearWindow()
-        histo_list = cmds.listAttr("persp", ud=True)
-        if histo_list is not None:
-            if len(histo_list) > 1:
-                show_delete_miniwindow()
-            elif len(histo_list) == 1:
-                clear_command(current_history_index=0, type_smear="stretching")
-        else:
-            logger.error("No Autosmear has been created.")
+        if self.delete_button.text() == "Delete Stretching":
+            histo_list = cmds.listAttr("persp", ud=True)
+            if histo_list is not None:
+                if len(histo_list) > 1:
+                    show_delete_miniwindow(smear_type="stretching")
+                elif len(histo_list) == 1:
+                    clear_command(current_history_index=0, type_smear="stretching")
+            else:
+                logger.error("No Autosmear has been created.")
+        elif self.delete_button.text() == "Delete Ghosting":
+            autosmear_ghosting_grp = []
+            referred_group = cmds.ls(assemblies=True)
+            if referred_group is not None:
+                if len(referred_group) > 1:
+                    show_delete_miniwindow(smear_type="ghosting")
+                elif len(referred_group) == 1:
+                    for member in referred_group:
+                        if member.startswith("AutoSmear_Ghosting_Grp") is True:
+                            autosmear_ghosting_grp.append(nodes)
+                    clear_command(current_history_index=0, type_smear="ghosting", ghosting_group=autosmear_ghosting_grp[-1])
+    
+    def closeEvent(self, event):
+        if event.isAccepted() is True:
+            demo_ghosting_utils.clear_face_ID_data()
 
 
 class StretchingWidget(QWidget):
@@ -576,6 +581,7 @@ class InfoInput(QGridLayout):
         self.end_frame_label = QLabel("End Frame: ")
         self.end_frame_spinbox = QSpinBox()
         self.end_frame_spinbox.setMaximum(100000)
+        self.end_frame_spinbox.setValue(int(cmds.playbackOptions(q=True, max = 1)))
         self.end_frame_select_button = QPushButton("Select")
         self.end_frame_select_button.setMinimumHeight(20)
 
@@ -644,6 +650,11 @@ class CustomListWidget(QListWidget):
         item = ChildControllerListWidgetItem(obj_name)
         self.indexFromItem(item)
         self.addItem(item)
+        self.item_list.append(item.item_name())
+    
+    def return_item_list(self):
+        # print(self.item_list)
+        return(self.item_list)
 
 
 class ChildControllerListWidget(QListWidget):
@@ -686,7 +697,6 @@ class ChildControllerListWidget(QListWidget):
 
             self.addItem(item)
             self.item_list.append(member)
-
     
     def delete_current_index(self):
         current_item = self.selectedItems()
@@ -867,7 +877,15 @@ class DeleteSmearWindow(QDialog):
         self.main_layout.addLayout(self.buttons_layout)
     
     def delete_latest_smear(self):
-        clear_command(current_history_index=-1, type_smear="stretching")
+        if ui.delete_button.text() == "Delete Stretching":
+            clear_command(current_history_index=-1, type_smear="stretching")
+        elif ui.delete_button.text() == "Delete Ghosting":
+            autosmear_ghosting_grp = []
+            referred_group = cmds.ls(assemblies=True)
+            for member in referred_group:
+                if member.startswith("AutoSmear_Ghosting_Grp") is True:
+                    autosmear_ghosting_grp.append(member)
+            clear_command(current_history_index=0, type_smear="ghosting", ghosting_grp=autosmear_ghosting_grp[-1])
         self.close()
     
     def open_history_window(self):
@@ -886,7 +904,7 @@ class HistoryTableWindow(QMainWindow):
     """
     def __init__(self, *args, **kwargs):
         super(HistoryTableWindow, self).__init__(*args, **kwargs)
-        self.setFixedSize(QSize(440,300))
+        self.setFixedSize(QSize(450,380))
 
         self.setWindowTitle("Autosmear history")
 
@@ -915,6 +933,7 @@ class HistoryTableWindow(QMainWindow):
         self.main_layout.addWidget(self.delete_button)
 
         #----- ADD HISTORY FROM ATTR -----#
+        #! 1) add stretching history
         if cmds.objExists("persp") is True:
             history_node = cmds.listAttr("persp", ud=True) or []
             for member in (history_node):
@@ -929,6 +948,20 @@ class HistoryTableWindow(QMainWindow):
 
                 current_time = str(split_current_data[0])
                 self.add_history(smear_type=type, frame=current_time, main_handler=current_name)
+
+        #! 2) add ghosting history
+        autosmear_ghosting_grp = []
+        top_node = cmds.ls(assemblies=True)
+        for nodes in top_node:
+            if nodes.startswith("AutoSmear_Ghosting_Grp") is True:
+                autosmear_ghosting_grp.append(nodes)
+        for members in autosmear_ghosting_grp:
+            current_data = str(cmds.getAttr("{name}.smear_history".format(name=members)))
+            split_current_data = current_data.split("||")
+            current_name = str(split_current_data[1])
+            current_time = str(split_current_data[0])
+            self.add_history(smear_type="ghosting", frame=current_time, main_handler=current_name)
+
     
     def on_selectionChanged(self, selected):
         for ix in selected.indexes():
@@ -959,6 +992,22 @@ class HistoryTableWindow(QMainWindow):
         self.history_item_dict["frame"].append(frame_item.item_name())
         self.history_item_dict["main_handler"].append(main_handler_item.item_name())
     
+    def contextMenuEvent(self, event):
+        self.menu = QMenu(self)
+        edit_action = QAction('Edit', self)
+        # edit_action.triggered.connect(lambda: self.edit_slot(event))
+        self.menu.addAction(edit_action)
+        if len(self.main_table.selectedItems()) > 0:
+            self.menu.popup(QCursor.pos())
+
+    # def edit_slot(self, event):
+    #     print "renaming slot called"
+    #     row = self.tableWidget.rowAt(event.pos().y())
+    #     col = self.tableWidget.columnAt(event.pos().x())
+    #     cell = self.tableWidget.item(row, col)
+    #     cellText = cell.text()
+    #     widget = self.tableWidget.cellWidget(row, col)
+    
     def test_print_result(self):
         # print(self.history_item_dict)
         # print(self.main_table.currentItem().item_name())
@@ -969,8 +1018,12 @@ class HistoryTableWindow(QMainWindow):
         #! Clear smear in history window
         current_row = self.main_table.currentRow()
         smear_type = self.main_table.item(current_row, 0).item_name()
+        ghost_type_grp = self.main_table.item(current_row, 2).item_name()
         self.main_table.removeRow(current_row)
-        clear_command(current_history_index=current_row, type_smear=smear_type)
+        clear_command(
+            current_history_index=current_row,
+            type_smear=smear_type,
+            ghosting_grp=ghost_type_grp)
 
     # def message_box(self):
     #     message = QMessageBox()
@@ -1044,7 +1097,7 @@ def attributes_query_command(name=""):
     print(user_defined_attribute)
     return user_defined_attribute
 
-def show_delete_miniwindow():
+def show_delete_miniwindow(smear_type=""):
 	maya_ptr = omui.MQtUtil.mainWindow()
 	ptr = wrapInstance(int(maya_ptr), QWidget)
 
@@ -1070,12 +1123,11 @@ def show_history_window():
 	table_window = HistoryTableWindow(parent=ptr)
 	table_window.show()
 
-def clear_command(current_history_index=0, type_smear=""):
-    attr_name = cmds.listAttr("persp", ud=True)[current_history_index]
-    smear_history = "persp.{attr}".format(attr=attr_name)
-    history_string_list = (cmds.getAttr(smear_history)).split("||")
-
+def clear_command(current_history_index=0, type_smear="", ghosting_grp=""):
     if type_smear == "stretching":
+        attr_name = cmds.listAttr("persp", ud=True)[current_history_index]
+        smear_history = "persp.{attr}".format(attr=attr_name)
+        history_string_list = (cmds.getAttr(smear_history)).split("||")
         converted_ctrl_string_list = ast.literal_eval(history_string_list[1])
         current_time = int(history_string_list[0])
 
@@ -1088,9 +1140,7 @@ def clear_command(current_history_index=0, type_smear=""):
             "{last_ctrl}_{timeframe}_autoSmearTool_LOC_grp".format(
                 last_ctrl=converted_ctrl_string_list[-1], timeframe=str(current_time-1)))
     elif type_smear == "ghosting":
-        cmds.setAttr(smear_history, lock=False)
-        cmds.deleteAttr("persp", at=attr_name)
-        cmds.delete(history_string_list[1])
+        cmds.delete(ghosting_grp)
 
 def go_to_web():
     webbrowser.open('https://www.youtube.com/watch?v=dQw4w9WgXcQ')
