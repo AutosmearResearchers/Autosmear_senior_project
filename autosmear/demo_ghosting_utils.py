@@ -193,12 +193,22 @@ def get_values(
     read_file.close()
 
     #! calculate the smear_frame  as a list
-    if smear_option == 1:    
+    #todo identify current smear frame(s)
+    q_smear_frames = ""
+    smear_subtype = ""
+    if smear_option == 1:
         smear_frames = calculate_velocity(start_frame,end_frame,main_ctrl)  #auto smear
+        q_smear_frames = "{current}".format(current=smear_frames[0])
+        smear_subtype = "A"
     elif smear_option == 2:
         smear_frames = get_smear_interval(start_frame,end_frame,interval)   #interval smear
+        # q_smear_frames = "{start_current}-{end_current}".format(start_current=smear_frames[0],end_current=smear_frames[-1])
+        q_smear_frames = "{current}".format(current=smear_frames)
+        smear_subtype = "B"
     else:
         smear_frames = get_custom_smear_frame(custom_frame)
+        q_smear_frames = "{current}".format(current=custom_frame)
+        smear_subtype = "C"
 
     ghosting_geo_list = []  #? a list stored all the ghosting geometry generated
 
@@ -279,27 +289,11 @@ def get_values(
     #!clear the text file after smear is complete
     # clear_face_ID_data()
 
-############################################################################    
-    #NOTE: Creation of Clear Smear for testing purpose ONLY
-    # if not cmds.objExists("smear_history_grp"):
-    #     cmds.group(em=True, name="smear_history_grp")
-############################################################################
-
     #! create history dict and record history of smear
     order_num = 1
     smear_count_list = []
-    # last_history = cmds.listAttr("persp", ud=True)
 
-    # if last_history is not None:
-    #     if len(last_history) > 0:
-    #         for each_smear in last_history:
-    #             if each_smear.split("_s")[0] == "ghosting":
-    #                 smear_count_list.append(each_smear)
-
-    #         if len(smear_count_list) > 0:
-    #             order_num = int((smear_count_list[-1]).split("_s")[1]) + 1
-
-    history_dict = "{frame}||{ghost_grp}".format(frame=start_frame, ghost_grp=group_name)
+    history_dict = "{frame}||{type}||{ghost_grp}".format(frame=q_smear_frames, type=smear_subtype, ghost_grp=group_name)
     attr_naming = "ghosting_s{order}".format(order=order_num)
 
     #! EDIT: keep history attr in the ghosting_grp itself

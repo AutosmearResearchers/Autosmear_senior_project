@@ -33,18 +33,22 @@ def get_values(
     
     #todo check if user choose based on attribute or controller
     print(smear_option)
+    smear_subtype = ""
     if command_option == 2:
         #! using function to get the hierarchy of the ctrl
         # ctrl_hierarchy = get_ctrl_hierarchy(start_ctrl,end_ctrl)
         #! using function to calculate the velocity of the obj from start_frame to end_frame
         if smear_option == 1:
             smear_frame = calculate_velocity(start_frame,end_frame,ctrl_hierarchy)  #auto smear
+            smear_subtype = "A"
         elif smear_option == 2:
             smear_frame = calculate_interval_smear(start_frame,end_frame,interval)  #interval smear
+            smear_subtype = "B"
         else:
              smear_frame = calculate_custom_smear(custom_frame)     #custom smear
+             smear_subtype = "C"
         #! using function to keyframe the stretch smear effect (by ctrl)
-        stretch_ctrl(start_frame,end_frame,start_ctrl,smear_frame,ctrl_hierarchy,multiplier)
+        stretch_ctrl(start_frame,end_frame,start_ctrl,smear_frame,ctrl_hierarchy,multiplier,smear_subtype)
 
     else:
         tmp_attr_list = []
@@ -214,7 +218,7 @@ def calculate_custom_smear(custom_frame=1):
     """  
      return [custom_frame]
 
-def stretch_ctrl(start_frame=1,end_frame=1,start_ctrl="",smear_frames = [],ctrl_hierarchy = [],multiplier = 1.0):
+def stretch_ctrl(start_frame=1,end_frame=1,start_ctrl="",smear_frames = [],ctrl_hierarchy = [],multiplier = 1.0,smear_subtype = ""):
     number_of_ctrl = len(ctrl_hierarchy)
     locator_list = []
     used_ctrl=[start_ctrl]
@@ -265,7 +269,7 @@ def stretch_ctrl(start_frame=1,end_frame=1,start_ctrl="",smear_frames = [],ctrl_
             if len(smear_count_list) > 0:
                 order_num = int((smear_count_list[-1]).split("_s")[1]) + 1
 
-    history_dict = "{frame}||{ctrl}".format(frame=used_frame, ctrl=used_ctrl)
+    history_dict = "{frame}||{type}||{ctrl}".format(frame=used_frame, type=smear_subtype, ctrl=used_ctrl)
     attr_naming = "stretching_s{order}".format(order=order_num)
 
     cmds.addAttr("persp", ln=attr_naming, dt="string")
