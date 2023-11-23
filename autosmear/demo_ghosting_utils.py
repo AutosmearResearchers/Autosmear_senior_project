@@ -3,6 +3,8 @@ import maya.mel as mel
 from pprint import pprint
 import numpy as np
 import os
+import json
+import maya.OpenMaya as om
 
 '''
 NOTE: for testing the NCrig paste this in the script editor
@@ -87,6 +89,76 @@ def calculate_velocity(start_frame=1,end_frame=1,ctrl_hierarchy=[]):
     print(f'SMEAR FRAME AT:{smear_frame}')
     return [smear_frame]
 
+def worldSpaceToScreenSpace(camera, worldPoint):
+
+    # get current resolution
+    res_width = cmds.getAttr('defaultResolution.width')
+    res_height = cmds.getAttr('defaultResolution.height')
+
+    # get the dagPath to the camera shape node to get the world inverse matrix
+    sel_lst = om.MSelectionList()
+    sel_lst.add(camera)
+    dagPath = om.MDagPath()
+    sel_lst.getDagPath(0, dagPath)
+    dagPath.extendToShape()
+    camInvMtx = dagPath.inclusiveMatrix().inverse()
+
+    # use a camera function set to get projection matrix, convert the MFloatMatrix
+    # into a MMatrix for multiplication compatibility
+    fnCam = om.MFnCamera(dagPath)
+    mFloatMtx = fnCam.projectionMatrix()
+    projMtx = om.MMatrix(mFloatMtx.matrix)
+
+    # multiply all together and do the normalisation
+    mPoint = om.MPoint(worldPoint[0], worldPoint[1],
+                       worldPoint[2]) * camInvMtx * projMtx
+    x = (mPoint[0] / mPoint[3] / 2 + .5) * res_width
+    y = (mPoint[1] / mPoint[3] / 2 + .5) * res_height
+
+    return [x, y]
+
+def calculate_velocity_from_camera_space(start_frame=1, end_frame=1, ctrl_hierarchy=[]):
+    """
+    calculate_velocity_from_camera_space()
+
+    Args:
+        start_frame (int): start keyframe
+        end_frame (int): end keyframe
+        ctrl_hierarchy (list): list of hierarchical controller
+    """
+    end_ctrl = ctrl_hierarchy[-1]
+    pos_list = []
+    velocity = []  # ?List of all the velocity
+    max_a = 0  # ? peak acceleration
+    s = []  # ? list of position difference
+    n = 0  # ? dynamic array index
+    smear_frame = start_frame
+
+    for frame_number in range(start_frame, end_frame):
+        # todo finding position vector of the end_ctrl for each frame
+        cmds.currentTime(frame_number)
+        worldPosition = cmds.xform(
+            end_ctrl, query=True, translation=True, worldSpace=True)
+        pos_vector = worldSpaceToScreenSpace(
+            camera='persp', worldPoint=worldPosition)  # !NOTE: Change the camera!
+        pos_list.append(pos_vector)
+
+        # todo Since, s = pos_list[n] - pos_list[n-1] ==> at n = 0; s = pos_list[0] - 0
+        if frame_number is start_frame:
+            s.append(pos_list[n])
+            n += 1
+            continue
+
+    for vi in range(len(velocity)):  # a1-a0 find the difference
+        if vi == 0:
+            continue
+        a = velocity[vi] - velocity[vi-1]
+        if a > max_a:
+            max_a = a
+            smear_frame = vi + start_frame
+
+    return [smear_frame]
+
 def get_smear_interval(start_frame = 1,end_frame = 1,smear_interval=1):
     '''
     get_smear_interval()
@@ -120,7 +192,6 @@ def get_custom_smear_frame(custom_frame=1):
     
     return smear_frame
 
-
 def get_ghost_object_face_ID(selected_faces = []):
     '''
     get_ghost_object_face_ID()
@@ -131,23 +202,68 @@ def get_ghost_object_face_ID(selected_faces = []):
     '''
     #todo getting all the selected faces
     face_ID = cmds.ls(selected_faces,flatten=True)
-    path = get_current_maya_file_path(True)
     
-    if '.f[' in face_ID[0]:    
-        geo_name = face_ID[0][:face_ID[0].rfind('.')]
-        
-        all_faces = cmds.polyListComponentConversion(geo_name,toFace=True)
-        all_faces_ID = cmds.ls(all_faces,flatten = True)
-        
-        for remove_selected_face in face_ID:
-            all_faces_ID.remove(remove_selected_face)
-                
-    else:
-        all_faces_ID = face_ID
+    path = get_current_maya_file_path(False)
+    path = path[:path.rfind('.')]
+    
+    full_path = '{path}_Autosmear_Ghosting_face_ID.json'.format(path=path)
 
-    file = open('{path}collection_face_ID.txt'.format(path = path),'a+')
-    file.write('{all_faces_ID},'.format(all_faces_ID=all_faces_ID))
+    if os.path.exists(full_path):   
+        #! if file already exist
+        old_file = open(full_path, 'r')
+        face_ID_dict = json.load(old_file)  # a dictionary storing geo_name: geo_face_ID pair
+        old_geo_key_lst = list(face_ID_dict.keys()) #geo keys that should not be return to the UI
+        
+        old_file.close()
+    else:
+        #! if file does not exist
+        face_ID_dict = {}
+        old_geo_key_lst = []
+    
+    # ? overwrite the existing dict with the new dict
+    file = open(full_path,'w')    
+    for each_face in face_ID: 
+
+        if cmds.nodeType(each_face)=='mesh':
+            geo_name = each_face[:each_face.rfind('.f')]
+            
+            #! creating a geo_name key first before gradually appending the value into it
+
+            if geo_name not in face_ID_dict:    #!if geo_name is not a key in face_ID_dict
+                face_ID_dict[geo_name] = []     #imply that its a new key introduce to the dict
+
+            elif each_face in face_ID_dict[geo_name]: #!if geo_name already exist as key in dict AND repeated element 
+                continue                              #ignore repeated element 
+
+            face_ID_dict[geo_name].append(each_face)
+            
+    json_object = json.dumps(face_ID_dict,indent=2)
+    #todo overwrite the dictionary into the text file
+    file.write(json_object)
     file.close()
+
+    geo_key_lst = list(face_ID_dict.keys())
+    geo_return_lst = subtract_lst(geo_key_lst,old_geo_key_lst)
+
+    #print('OLD:')
+    #pprint(old_geo_key_lst)
+    #print('NEW:')
+    #pprint(geo_key_lst)
+    #print('RETURN:')
+    #print(geo_return_lst)
+
+    return geo_return_lst
+
+def subtract_lst(new_lst = [],old_lst = []):
+    '''
+    subtract_lst()
+    accept two lists from the users and returns the 
+    
+    lst3 = [value for value in lst1 if value in lst2]
+    '''
+    intersection_lst = [value for value in new_lst if value not in old_lst]
+
+    return intersection_lst
 
 def clear_face_ID_data():
     '''
@@ -157,15 +273,14 @@ def clear_face_ID_data():
     Args:
         None
     '''
-    path = get_current_maya_file_path(True)
-    full_path = '{path}collection_face_ID.txt'.format(path=path)
+    path = get_current_maya_file_path(False)
+    path = path[:path.rfind('.')]
+    full_path = '{path}_Autosmear_Ghosting_face_ID.json'.format(path=path)
     if os.path.exists(full_path):
-        clear_file = open(full_path, 'w')
-        clear_file.close()
+        os.remove(full_path)
     else:
         print("wth???")
         return
-
 
 def get_values(
     start_frame=1,
@@ -185,120 +300,84 @@ def get_values(
         visibility_keyframe (int): number of frame the ghost should be visible
     '''
     #todo read the text file containing the face_ID ghosting data
-    path = get_current_maya_file_path(True)
+    path = get_current_maya_file_path(False)
+    path = path[:path.rfind('.')]
 
-    read_file = open('{path}collection_face_ID.txt'.format(path=path),'r')
-    read = read_file.readlines()[0]
-    ghosting_lst = eval(read)
+    read_file = open('{path}_Autosmear_Ghosting_face_ID.json'.format(path=path),'r')
+    ghosting_lst = json.load(read_file)
     read_file.close()
 
     #! calculate the smear_frame  as a list
-    #todo identify current smear frame(s)
-    q_smear_frames = ""
-    smear_subtype = ""
-    if smear_option == 1:
+    if smear_option == 1:    
         smear_frames = calculate_velocity(start_frame,end_frame,main_ctrl)  #auto smear
-        q_smear_frames = "{current}".format(current=smear_frames[0])
-        smear_subtype = "A"
     elif smear_option == 2:
         smear_frames = get_smear_interval(start_frame,end_frame,interval)   #interval smear
-        # q_smear_frames = "{start_current}-{end_current}".format(start_current=smear_frames[0],end_current=smear_frames[-1])
-        q_smear_frames = "{current}".format(current=smear_frames)
-        smear_subtype = "B"
     else:
         smear_frames = get_custom_smear_frame(custom_frame)
-        q_smear_frames = "{current}".format(current=custom_frame)
-        smear_subtype = "C"
 
-    ghosting_geo_list = []  #? a list stored all the ghosting geometry generated
+    sub_grp_lst = [] #?list containing all the sub_grp(s)
 
-    #todo transversing through each object face_ID 
-    for each_ghost_geo in ghosting_lst:
-        first_element = each_ghost_geo[0] #eg. jecket_Geo.f[3280]
+    for current_frame in smear_frames:
+        ghosting_geo_list = []  # ? a list stored all the ghosting geometry generated
+        
+        # todo transversing through each object face_ID
+        for each_ghost_geo in ghosting_lst:
 
-        #todo check wether the current elemeny contains the face ID or the entire geometry
-        #!contains a face ID i.e. '.f[]'
-        if '.f[' in first_element:  
-            original_geo_name = first_element[:first_element.rfind('.')]
-            face_ID_list = []
-            
-            for each_face in each_ghost_geo:
-                face_ID_list.append(each_face[each_face.rfind('.'):])
+            original_geo_name = each_ghost_geo
+            face_ID_list = ghosting_lst[each_ghost_geo]
 
-        #!contains the entire geometry
-        else:   
-            original_geo_name = first_element
-            face_ID_list = []
+            # todo create ghosting for every smear frames calculated.
 
-        #todo create ghosting for every smear frames calculated.
-        for current_frame in smear_frames:
-            #!set the keyframe to current frame 
-            cmds.currentTime(current_frame)
-            #!duplicate the geometry 
+            #!duplicate the geometry
             duplicate_geo_name = duplicate_geometry(original_geo_name)
-            
-            #!keyframe the visibility of the ghost to be 0 from zero to current frame
-            cmds.currentTime(0)
-            cmds.setKeyframe(duplicate_geo_name, attribute='visibility', time=0, value=0)
-            cmds.currentTime(current_frame)
-
-            #!keyframe the visibility of the ghost to be 1
-            cmds.setKeyframe(duplicate_geo_name, attribute='visibility', time=current_frame, value=1)
-
             ghosting_geo_list.append(duplicate_geo_name)
+
             #!remove all the unselected face for that geometry
-            if face_ID_list is not []:    
-                remove_non_selected_faces(duplicate_geo_name,face_ID_list)
-            
-            #!after visible frame inputed by the user, keyframe the visibility of the ghost to 0 
-            cmds.currentTime(current_frame+visibility_keyframe)
-            cmds.setKeyframe(duplicate_geo_name, attribute='visibility', time=current_frame+visibility_keyframe, value=0)
-    
-    grouping = cmds.group(ghosting_geo_list,name = 'AutoSmear_Ghosting_Grp_001')
-    group_name = cmds.ls(grouping)[0]
-
-    #!create each individual grouping
-    all_ghosting_component = cmds.listRelatives(group_name)
-    print(all_ghosting_component)
-    number_of_ghost_sub_grp = len(smear_frames)
-
-    keyword = ''
-    for each_ghost_geo in range(1,number_of_ghost_sub_grp+1):
-        #! adding padding
-        if len(str(each_ghost_geo)) == 1:
-            keyword = '00' + str(each_ghost_geo)
-        elif len(str(each_ghost_geo)) == 2:
-            keyword = '0' + str(each_ghost_geo)
-        else:
-            keyword = str(each_ghost_geo)
+            if face_ID_list is not []:
+                remove_non_selected_faces(duplicate_geo_name, face_ID_list)
         
-        #! find the matching keyword and group
-        individual_group = []
-        for each_ghost_component in all_ghosting_component:
-            if keyword in each_ghost_component:
-                individual_group.append(each_ghost_component)
-        current_frame = each_ghost_geo - 1
+        #todo create sub_grp
+        ctrl_matrix = (cmds.xform(main_ctrl[0], q=True, m=True, ws=True))
+        sub_grp = bake_transform_to_parent_matrix(ctrl_matrix,ghosting_geo_list)
+        sub_grp_lst.append(sub_grp)
+        
+        #todo key the sub_grp
+        initial_frame = (int(cmds.playbackOptions(q=True, min=1)))
+        cmds.currentTime(initial_frame)
+        cmds.setKeyframe(sub_grp,
+                         attribute='visibility', time=initial_frame, value=0)
+        
         cmds.currentTime(current_frame)
-        sub_grp_name = cmds.group(individual_group,name = 'Ghosting_SubGrp_001')
+        cmds.setKeyframe(sub_grp,
+                         attribute='visibility', time=current_frame, value=1)
         
-        # #!adjust pivot of the ghosting group !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-        # object_world_rotation = cmds.xform(main_ctrl[0],query = True,rotation = True,worldSpace = True)
-        # cmds.select(sub_grp_name)
-        # cmds.manipPivot(o=object_world_rotation)
+        cmds.currentTime(current_frame+visibility_keyframe)
+        cmds.setKeyframe(sub_grp,
+                         attribute='visibility', time=current_frame+visibility_keyframe, value=0)
 
-    #!clear the text file after smear is complete
-    # clear_face_ID_data()
+    cmds.group(sub_grp_lst,name = 'Autosmear_ghostingGrp_001')
 
-    #! create history dict and record history of smear
-    order_num = 1
-    smear_count_list = []
+def bake_transform_to_parent_matrix(ctrl_matrix=[], ghosting_geos=[]):
+    #! create tmp_grp for Ghosting geos & find its world translation
+    cmds.group(ghosting_geos, n="tmp_grp")
+    tmp_grp_translation = cmds.xform("tmp_grp", query=True, scalePivot=True)
 
-    history_dict = "{frame}||{type}||{ghost_grp}".format(frame=q_smear_frames, type=smear_subtype, ghost_grp=group_name)
-    attr_naming = "ghosting_s{order}".format(order=order_num)
+    #! clear old translation matrix and add the tmp instead
+    del ctrl_matrix[-4:]
+    for member in tmp_grp_translation:
+        ctrl_matrix.append(member)
+    ctrl_matrix.append(1.0)
 
-    #! EDIT: keep history attr in the ghosting_grp itself
-    cmds.addAttr(group_name, ln="smear_history", dt="string")
-    cmds.setAttr("{grp}.{attr_name}".format(grp=group_name, attr_name = "smear_history"), history_dict, type="string", lock = True)
+    #! create sub group at (0,0,0) & set offsetParentMatrix
+    grp_command = cmds.group(em=True, n="Ghosting_SubGrp_001")
+    cmds.setAttr("{subgrp}.offsetParentMatrix".format(
+        subgrp=grp_command), ctrl_matrix, type="matrix")
+
+    #! move Ghosting geos into Ghosting_SubGrp & delete tmp_grp
+    cmds.parent(ghosting_geos, grp_command)
+    cmds.delete("tmp_grp")
+
+    return grp_command
 
 def duplicate_geometry(ghosting_object=''):
     '''
@@ -314,6 +393,21 @@ def duplicate_geometry(ghosting_object=''):
     new_name = '{ghost_name}__Autosmear_ghost_obj_001'.format(ghost_name=ghosting_object)
     duplicate_geo = cmds.duplicate(ghosting_object,name = new_name)
     cmds.parent(duplicate_geo,world=True)
+    
+    #! unlock the duplicate geometry
+    cmds.setAttr('{dup}.tx'.format(dup = duplicate_geo[0]),lock = False)
+    cmds.setAttr('{dup}.ty'.format(dup = duplicate_geo[0]),lock = False)
+    cmds.setAttr('{dup}.tz'.format(dup = duplicate_geo[0]),lock = False)
+
+    cmds.setAttr('{dup}.rx'.format(dup = duplicate_geo[0]),lock = False)
+    cmds.setAttr('{dup}.ry'.format(dup = duplicate_geo[0]),lock = False)    
+    cmds.setAttr('{dup}.rz'.format(dup = duplicate_geo[0]),lock = False)
+
+    cmds.setAttr('{dup}.sx'.format(dup = duplicate_geo[0]),lock = False)
+    cmds.setAttr('{dup}.sy'.format(dup = duplicate_geo[0]),lock = False)
+    cmds.setAttr('{dup}.sz'.format(dup = duplicate_geo[0]),lock = False)
+
+    cmds.setAttr('{dup}.v'.format(dup = duplicate_geo[0]),lock = False)
 
     duplicate_geo_name = cmds.ls(duplicate_geo)[0]
 
@@ -323,9 +417,19 @@ def remove_non_selected_faces(ghosting_name = '',face_ID_list = []):
     '''
     remove_non_selected_faces()
     '''
-    all_delete_face = []
+    all_selected_faces = []
+    all_delete_faces = []
+
     for each_face in face_ID_list:
-        all_delete_face.append(ghosting_name+each_face)
+        face_ID_name = '{ghosting_name}.f{each_face}'.format(ghosting_name = ghosting_name,
+                                                             each_face = each_face.split('.f')[1])
+        all_selected_faces.append(face_ID_name)
 
-    cmds.polyDelFacet(all_delete_face)
+    all_faces = cmds.polyListComponentConversion(ghosting_name,toFace = True)
+    all_faces = cmds.ls(all_faces,flatten = True)
 
+    for current_face in all_faces:
+        if current_face not in all_selected_faces:
+            all_delete_faces.append(current_face)
+    
+    cmds.polyDelFacet(all_delete_faces)

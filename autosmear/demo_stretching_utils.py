@@ -1,3 +1,4 @@
+import maya.OpenMaya as om
 import maya.cmds as cmds
 import maya.mel as mel
 import numpy as np
@@ -33,22 +34,18 @@ def get_values(
     
     #todo check if user choose based on attribute or controller
     print(smear_option)
-    smear_subtype = ""
     if command_option == 2:
         #! using function to get the hierarchy of the ctrl
         # ctrl_hierarchy = get_ctrl_hierarchy(start_ctrl,end_ctrl)
         #! using function to calculate the velocity of the obj from start_frame to end_frame
         if smear_option == 1:
             smear_frame = calculate_velocity(start_frame,end_frame,ctrl_hierarchy)  #auto smear
-            smear_subtype = "A"
         elif smear_option == 2:
             smear_frame = calculate_interval_smear(start_frame,end_frame,interval)  #interval smear
-            smear_subtype = "B"
         else:
              smear_frame = calculate_custom_smear(custom_frame)     #custom smear
-             smear_subtype = "C"
         #! using function to keyframe the stretch smear effect (by ctrl)
-        stretch_ctrl(start_frame,end_frame,start_ctrl,smear_frame,ctrl_hierarchy,multiplier,smear_subtype)
+        stretch_ctrl(start_frame,end_frame,start_ctrl,smear_frame,ctrl_hierarchy,multiplier)
 
     else:
         tmp_attr_list = []
@@ -194,6 +191,75 @@ def calculate_velocity(start_frame=1,end_frame=1,ctrl_hierarchy=[]):
     
     return [smear_frame]
 
+def worldSpaceToScreenSpace(camera, worldPoint):
+
+    # get current resolution
+    res_width = cmds.getAttr('defaultResolution.width')
+    res_height = cmds.getAttr('defaultResolution.height')
+
+    # get the dagPath to the camera shape node to get the world inverse matrix
+    sel_lst = om.MSelectionList()
+    sel_lst.add(camera)
+    dagPath = om.MDagPath()
+    sel_lst.getDagPath(0, dagPath)
+    dagPath.extendToShape()
+    camInvMtx = dagPath.inclusiveMatrix().inverse()
+
+    # use a camera function set to get projection matrix, convert the MFloatMatrix
+    # into a MMatrix for multiplication compatibility
+    fnCam = om.MFnCamera(dagPath)
+    mFloatMtx = fnCam.projectionMatrix()
+    projMtx = om.MMatrix(mFloatMtx.matrix)
+
+    # multiply all together and do the normalisation
+    mPoint = om.MPoint(worldPoint[0], worldPoint[1],
+                       worldPoint[2]) * camInvMtx * projMtx
+    x = (mPoint[0] / mPoint[3] / 2 + .5) * res_width
+    y = (mPoint[1] / mPoint[3] / 2 + .5) * res_height
+
+    return [x, y]
+
+def calculate_velocity_from_camera_space(start_frame=1,end_frame=1,ctrl_hierarchy=[]):
+    """
+    calculate_velocity_from_camera_space()
+
+    Args:
+        start_frame (int): start keyframe
+        end_frame (int): end keyframe
+        ctrl_hierarchy (list): list of hierarchical controller
+    """
+    end_ctrl = ctrl_hierarchy[-1]
+    pos_list = []
+    velocity = []  # ?List of all the velocity
+    max_a = 0  # ? peak acceleration
+    s = []  # ? list of position difference
+    n = 0  # ? dynamic array index
+    smear_frame = start_frame
+    
+    for frame_number in range(start_frame,end_frame):
+        #todo finding position vector of the end_ctrl for each frame
+        cmds.currentTime(frame_number)
+        worldPosition = cmds.xform(
+            end_ctrl, query=True, translation=True, worldSpace=True)
+        pos_vector = worldSpaceToScreenSpace(camera='persp',worldPoint=worldPosition) #!NOTE: Change the camera!
+        pos_list.append(pos_vector)
+
+        # todo Since, s = pos_list[n] - pos_list[n-1] ==> at n = 0; s = pos_list[0] - 0
+        if frame_number is start_frame:
+            s.append(pos_list[n])
+            n += 1
+            continue
+
+    for vi in range(len(velocity)):  # a1-a0 find the difference
+        if vi == 0:
+            continue
+        a = velocity[vi] - velocity[vi-1]
+        if a > max_a:
+            max_a = a
+            smear_frame = vi + start_frame
+
+    return [smear_frame]
+
 def calculate_interval_smear(start_frame=1,end_frame=1,interval=1):
     """
     calculating an interval smear
@@ -218,7 +284,7 @@ def calculate_custom_smear(custom_frame=1):
     """  
      return [custom_frame]
 
-def stretch_ctrl(start_frame=1,end_frame=1,start_ctrl="",smear_frames = [],ctrl_hierarchy = [],multiplier = 1.0,smear_subtype = ""):
+def stretch_ctrl(start_frame=1,end_frame=1,start_ctrl="",smear_frames = [],ctrl_hierarchy = [],multiplier = 1.0):
     number_of_ctrl = len(ctrl_hierarchy)
     locator_list = []
     used_ctrl=[start_ctrl]
@@ -269,7 +335,7 @@ def stretch_ctrl(start_frame=1,end_frame=1,start_ctrl="",smear_frames = [],ctrl_
             if len(smear_count_list) > 0:
                 order_num = int((smear_count_list[-1]).split("_s")[1]) + 1
 
-    history_dict = "{frame}||{type}||{ctrl}".format(frame=used_frame, type=smear_subtype, ctrl=used_ctrl)
+    history_dict = "{frame}||{ctrl}".format(frame=used_frame, ctrl=used_ctrl)
     attr_naming = "stretching_s{order}".format(order=order_num)
 
     cmds.addAttr("persp", ln=attr_naming, dt="string")
