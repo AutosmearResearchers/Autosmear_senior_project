@@ -282,14 +282,45 @@ def clear_face_ID_data():
         print("wth???")
         return
 
+def delete_geo_name_key(geo_name = ''):
+    '''
+    get_ghost_object_face_ID()
+    this function accepts key geo_name and pop the corresponding key:value pair from the ghosting_face_ID
+    dictionary.
+
+    Args:
+        geo_name (str): key that user wish to delete.
+    '''
+    path = get_current_maya_file_path(False)
+    path = path[:path.rfind('.')]
+    full_path = '{path}_Autosmear_Ghosting_face_ID.json'.format(path=path)
+
+    if os.path.exists(full_path):
+        file = open(full_path, 'r')
+        face_ID_dict = json.load(file)
+        file.close()
+
+        try:
+            face_ID_dict.pop(geo_name)
+            new_file = open(full_path,'w')
+            json_object = json.dumps(face_ID_dict, indent=2)
+
+            new_file.write(json_object)
+            new_file.close()
+
+        except:
+            cmds.warning('Dictionary key does not exist.')
+
 def get_values(
     start_frame=1,
     end_frame=1,
     main_ctrl=[],
     interval = 1,
-    custom_frame = 1,
-    smear_option = 1,
-    visibility_keyframe = 2):
+    custom_frame=1,
+    smear_option=1,
+    visibility_keyframe=2,
+    camera_space=False
+    ):
     '''
     main function for proceeding ghosting smear feature
 
@@ -308,12 +339,22 @@ def get_values(
     read_file.close()
 
     #! calculate the smear_frame  as a list
+    #todo identify current smear frame(s)
+    q_smear_frames = ""
+    smear_subtype = ""
     if smear_option == 1:    
         smear_frames = calculate_velocity(start_frame,end_frame,main_ctrl)  #auto smear
+        q_smear_frames = "{current}".format(current=smear_frames[0])
+        smear_subtype = "A"
     elif smear_option == 2:
         smear_frames = get_smear_interval(start_frame,end_frame,interval)   #interval smear
+        # q_smear_frames = "{start_current}-{end_current}".format(start_current=smear_frames[0],end_current=smear_frames[-1])
+        q_smear_frames = "{current}".format(current=smear_frames)
+        smear_subtype = "B"
     else:
         smear_frames = get_custom_smear_frame(custom_frame)
+        q_smear_frames = "{current}".format(current=custom_frame)
+        smear_subtype = "C"
 
     sub_grp_lst = [] #?list containing all the sub_grp(s)
 
@@ -355,7 +396,17 @@ def get_values(
         cmds.setKeyframe(sub_grp,
                          attribute='visibility', time=current_frame+visibility_keyframe, value=0)
 
-    cmds.group(sub_grp_lst,name = 'Autosmear_ghostingGrp_001')
+    current_grp_name = cmds.group(sub_grp_lst,name = 'Autosmear_ghostingGrp_001')
+    #! create history dict and record history of smear
+    order_num = 1
+    smear_count_list = []
+
+    history_dict = "{frame}||{type}||{ghost_grp}".format(frame=q_smear_frames, type=smear_subtype, ghost_grp=current_grp_name)
+    attr_naming = "ghosting_s{order}".format(order=order_num)
+
+    #! EDIT: keep history attr in the ghosting_grp itself
+    cmds.addAttr(current_grp_name, ln="smear_history", dt="string")
+    cmds.setAttr("{grp}.{attr_name}".format(grp=current_grp_name, attr_name = "smear_history"), history_dict, type="string", lock = True)
 
 def bake_transform_to_parent_matrix(ctrl_matrix=[], ghosting_geos=[]):
     #! create tmp_grp for Ghosting geos & find its world translation
