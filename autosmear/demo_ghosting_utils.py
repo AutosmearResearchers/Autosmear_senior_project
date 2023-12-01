@@ -368,7 +368,6 @@ def get_values(
             face_ID_list = ghosting_lst[each_ghost_geo]
 
             # todo create ghosting for every smear frames calculated.
-
             #!duplicate the geometry
             duplicate_geo_name = duplicate_geometry(original_geo_name)
             ghosting_geo_list.append(duplicate_geo_name)
@@ -397,6 +396,10 @@ def get_values(
                          attribute='visibility', time=current_frame+visibility_keyframe, value=0)
 
     current_grp_name = cmds.group(sub_grp_lst,name = 'Autosmear_ghostingGrp_001')
+    
+    #! store the shaders for the ghosting object
+    store_material_SG(current_grp_name)
+    
     #! create history dict and record history of smear
     order_num = 1
     smear_count_list = []
@@ -484,3 +487,98 @@ def remove_non_selected_faces(ghosting_name = '',face_ID_list = []):
             all_delete_faces.append(current_face)
     
     cmds.polyDelFacet(all_delete_faces)
+
+def store_material_SG(ghostingGrp=''):
+    '''
+    store_material_SG()
+    this function create a JSON file that store the dictionary of mat_SG:[ghosting_geo(s)] pair.
+    Does not return any value.
+
+    ARGS:
+    ghosting_geo(str): name of the ghosting group.
+    '''
+    raw_dag = cmds.ls(ghostingGrp,dag = True,long=True)
+    path = get_current_maya_file_path(False)
+    path = path[:path.rfind('.')]
+
+    full_path = '{path}_Autosmear_Ghosting_SG.json'.format(path=path)
+
+    if os.path.exists(full_path):
+        #! if file already exist
+        old_file = open(full_path, 'r')
+        SG_dict = json.load(old_file)
+        old_file.close()
+    else:
+        #! if file does not exist
+        SG_dict = {}
+    
+    # ? overwrite the existing dict with the new dict
+    file = open(full_path, 'w')
+    
+    #todo obtain the key value pair for creating the dictionary  
+    for long_name in raw_dag:       
+        # ! obtain the long name from tranversing the raw_dag list a.k.a. value  
+        if '__Autosmear_ghost_obj_' in long_name and 'Shape' not in long_name:
+            
+            # ! obtain the SG
+            shaders = cmds.ls(cmds.listHistory(long_name,future = True),type='shadingEngine')
+            
+            for current_shader in shaders:
+                #! if current shader does not exist as a key in an SG_dict, create one
+                if current_shader not in SG_dict:
+                    SG_dict[current_shader] = []
+                
+                SG_dict[current_shader].append(long_name)
+            #print(f'LONG NAME: {long_name}')
+            #print(f'SHADER: {shaders}')
+    
+    json_object = json.dumps(SG_dict, indent=2)
+    
+    # todo overwrite the dictionary into the text file
+    file.write(json_object)
+    file.close()
+
+def reassign_materials():
+    '''
+    reassign_material()
+    this function reassign the shader to the selected object or, ghosting group based on the stored 
+    JSON file. Returns no value.
+
+    Args:
+        None
+    '''
+    path = get_current_maya_file_path(False)
+    path = path[:path.rfind('.')]
+    full_path = '{path}_Autosmear_Ghosting_SG.json'.format(path=path)
+    
+    #! if file already exist
+    if os.path.exists(full_path):
+        SG_file = open(full_path, 'r')
+        SG_dict = json.load(SG_file)
+        
+        for current_shader in SG_dict:
+            for each_ghosting_geo in SG_dict[current_shader]:
+                cmds.select(each_ghosting_geo)
+                try:
+                    cmds.sets(edit=True, forceElement= current_shader)
+                except:
+                    continue
+
+    SG_file.close()
+
+def clear_SG_data():
+    '''
+    clear_SG_data()
+    this function clear all the shading group ID
+
+    Args:
+        None
+    '''
+    path = get_current_maya_file_path(False)
+    path = path[:path.rfind('.')]
+    full_path = '{path}_Autosmear_Ghosting_SG.json'.format(path=path)
+    if os.path.exists(full_path):
+        os.remove(full_path)
+    else:
+        print("wth???")
+        return
