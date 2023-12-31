@@ -1,0 +1,35 @@
+// Get scripts location
+global string $gShelfTopLevel;
+string $currentShelf = `tabLayout -query -selectTab $gShelfTopLevel`;
+setParent $currentShelf;
+
+
+// Create tool name and path command
+string $scriptLocation = `scriptLocation`;
+string $toolNaming = "AutoSmear";
+string $command = "import sys\nfrom importlib import reload\ntoolPath = '" + $scriptLocation + "scripts'\nsystemPath = sys.path\nif toolPath not in systemPath:\n    systemPath.append(toolPath)\nimport ui.autosmear_main_ui as mainUI\nimport utils.demo_ghosting_utils as fileCheck\nreload(mainUI)\nreload(fileCheck)\nfileCheck.clear_face_ID_data()\nmainUI.run()";
+
+
+// Install button to current shelf
+string $icon = $scriptLocation + "icons/Autosmear_icon.png";
+shelfButton
+    -command $command
+    -annotation $toolNaming
+    -label $toolNaming
+    -image $icon
+    -style "iconOnly"
+    -sourceType "python";
+
+// Helper functions for locating script's location
+global proc scriptLocator (){}
+global proc string scriptLocation ()
+{
+    string $whatIs=`whatIs scriptLocator`;
+    string $fullPath=`substring $whatIs 25 999`;
+    string $buffer[];
+    int $numTok=`tokenize $fullPath "/" $buffer`;
+    int $numLetters=size($fullPath);
+    int $numLettersLastFolder=size($buffer[$numTok-1]);
+    string $scriptLocation=`substring $fullPath 1 ($numLetters-$numLettersLastFolder)`;
+    return $scriptLocation;
+}

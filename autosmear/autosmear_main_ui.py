@@ -25,13 +25,13 @@ logger.setLevel(logging.DEBUG)
 maya_ptr = omui.MQtUtil.mainWindow()
 ptr = wrapInstance(int(maya_ptr), QWidget)
 
-from autosmear import demo_stretching_utils
+from utils import demo_stretching_utils
 reload(demo_stretching_utils)
 
-from autosmear import demo_ghosting_utils
+from utils import demo_ghosting_utils
 reload(demo_ghosting_utils)
 
-from autosmear import demo_test_blend
+from utils import demo_test_blend
 reload(demo_test_blend)
 
 class MainWidget(QMainWindow):
@@ -47,7 +47,6 @@ class MainWidget(QMainWindow):
         self.stretching_feature = StretchingWidget()
         self.ghosting_feature = GhostingWidget()
         self.blending_feature = BlendingWidget()
-        self.edit_ghosting = EditGhostingWidget()
         self.infoinput = InfoInput()
         self.attribute_combobox = AttributeComboBox()
         self.hierawid = ChildControllerListWidget()
@@ -125,7 +124,6 @@ class MainWidget(QMainWindow):
         self.create_button.clicked.connect(self.create_command)
         self.delete_button.clicked.connect(self.delete_command)
         #? self.delete_button.clicked.connect(self.clear_command)
-        # self.dummy_button.clicked.connect(lambda: self.edit_ghosting.show())
         # self.dummy_button.clicked.connect(self.open_history_command)
         # self.dummy_button.clicked.connect(self.hierawid.return_item_list)
         # self.dummy_button.clicked.connect(self.stretching_feature.delete_command)
@@ -272,12 +270,15 @@ class MainWidget(QMainWindow):
             visibility_keyframe = self.ghosting_feature.vis_duration_spinbox.value(),
             camera_space = self.camera_space_checkbox.isChecked()
             )
-        elif self.feature_tab_widget.currentIndex() == 2:
-            ghosting_geo_name_list = []
-            ghosting_geo_name_list = (self.blending_feature.ghosting_geo_list.return_item_list())
-            lattice_dict = demo_test_blend.create_lattice_from_selected_ghost(ghosting_group=ghosting_geo_name_list,lattice_division = [4,3,3])
-            cluster_grp_lst = demo_test_blend.create_clusters_on_lattice(lattice_edge_loop_dict = lattice_dict)
-            demo_test_blend.snap_controllers_on_cluster(locator_group_list = cluster_grp_lst)
+        # elif self.feature_tab_widget.currentIndex() == 2:
+        #     ghosting_geo_name_list = []
+        #     ghosting_geo_name_list = (self.blending_feature.ghosting_geo_list.return_item_list())
+        #     lattice_dict = demo_test_blend.create_lattice_from_selected_ghost(ghosting_group=ghosting_geo_name_list,lattice_division = [4,3,3])
+        #     cluster_grp_lst = demo_test_blend.create_clusters_on_lattice(lattice_edge_loop_dict = lattice_dict)
+        #     demo_test_blend.snap_controllers_on_cluster(
+        #    locator_group_list = cluster_grp_lst,
+        #    ghosting_grp = self.blending_feature.ghosting_geo_list.return_item_list()
+        #    )
         else:
             print("NO TASK")
         # if table_window.isVisible() is True:
@@ -315,14 +316,23 @@ class MainWidget(QMainWindow):
                 self.create_button.setText("Create Controller Stretching")
             self.delete_button.setText("Delete Stretching")
             self.current_tab_color(0)
+            self.set_widget_frame_enable(True)
         elif self.feature_tab_widget.currentIndex() == 1:
             self.create_button.setText("Create Ghosting")
             self.delete_button.setText("Delete Ghosting")
             self.current_tab_color(1)
+            self.set_widget_frame_enable(True)
         else:
             self.create_button.setText("Create Blending")
             self.delete_button.setText("Delete Blending")
             self.current_tab_color(2)
+            self.set_widget_frame_enable(False)
+    
+    def set_widget_frame_enable(self, mode=True):
+        self.frame_zer.setEnabled(mode)
+        self.frame_one.setEnabled(mode)
+        self.frame_two.setEnabled(mode)
+
     
     def current_tab_color(self, selected_tab=0):
         if selected_tab == 0:
@@ -376,12 +386,14 @@ class MainWidget(QMainWindow):
         if self.autosmear_radiobutton.isChecked() is True:
             self.interval_spinbox.setEnabled(False)
             self.custom_smear_spinbox.setEnabled(False)
+            self.set_enabled_infoinput(True)
     
     def interval_connection(self):
         if self.interval_radiobutton.isChecked() is True:
             self.interval_spinbox.setEnabled(True)
             self.interval_vis_duration_spinbox.setEnabled(True)
             self.interval_vis_duration_end_label.setEnabled(True)
+            self.set_enabled_infoinput(True)
         else:
             self.interval_spinbox.setEnabled(False)
             self.interval_vis_duration_spinbox.setEnabled(False)
@@ -391,9 +403,19 @@ class MainWidget(QMainWindow):
         if self.custom_smear_radiobutton.isChecked() is True:
             self.custom_smear_spinbox.setEnabled(True)
             self.custom_smear_button.setEnabled(True)
+            self.set_enabled_infoinput(False)
+            
         else:
             self.custom_smear_spinbox.setEnabled(False)
             self.custom_smear_button.setEnabled(False)
+    
+    def set_enabled_infoinput(self, task=True):
+        self.infoinput.start_frame_label.setEnabled(task)
+        self.infoinput.start_frame_spinbox.setEnabled(task)
+        self.infoinput.start_frame_select_button.setEnabled(task)
+        self.infoinput.end_frame_label.setEnabled(task)
+        self.infoinput.end_frame_spinbox.setEnabled(task)
+        self.infoinput.end_frame_select_button.setEnabled(task)
     
     def open_history_command(self):
         # history_list = []
@@ -404,8 +426,6 @@ class MainWidget(QMainWindow):
         show_history_window()
     
     def delete_command(self):
-        # if self.delete_current_command is None:
-        #     self.delete_current_command = DeleteSmearWindow()
         if self.delete_button.text() == "Delete Stretching":
             stretching_main_node = find_stretching_history()
             for key in (stretching_main_node):
@@ -445,8 +465,6 @@ class StretchingWidget(QWidget):
 
         self.main_layout = QVBoxLayout()
         self.setLayout(self.main_layout)
-        # self.main_layout.setContentsMargins(0, 0, 0, 0)
-        # self.main_layout.setSpacing(5)
 
         self.hierawid = ChildControllerListWidget()
         self.attribute_combobox = AttributeComboBox()
@@ -454,7 +472,6 @@ class StretchingWidget(QWidget):
         self.delete_current_command = None
 
         self.main_toolbox = QToolBox()
-        # self.setStyleSheet("background-color: #F93462")
 
         # ----------- CREATE SPACER ------------ #
         self.spacer = QSpacerItem(20, 40, QSizePolicy.Minimum, QSizePolicy.Expanding)
@@ -494,7 +511,7 @@ class StretchingWidget(QWidget):
 
         self.get_hierarchy_add_button = QPushButton("add")
         self.get_hierarchy_add_button.setStyleSheet("background-color: #4d4d4d")
-        self.get_hierarchy_add_button.clicked.connect(self.hierawid.add_new_item)
+        self.get_hierarchy_add_button.clicked.connect(self.bake_item_command)
 
         self.get_hierarchy_remove_button = QPushButton("remove")
         self.get_hierarchy_remove_button.setStyleSheet("background-color: #4d4d4d")
@@ -575,6 +592,17 @@ class StretchingWidget(QWidget):
             return
         for item in attrs_list:
             self.attribute_combobox.addItem(item)
+    
+    def bake_item_command(self):
+        obj = object_query_command()
+        list_item = self.hierawid.return_item_list()
+        for member in obj:
+            if member not in list_item:
+                self.hierawid.add_new_item(member)
+            else:
+                logger.warning(
+                    "Objects with the same name won't be included in the baking process: {item}".format(item=member)
+                    )
 
 
 class InfoInput(QGridLayout):
@@ -679,7 +707,6 @@ class CustomListWidget(QListWidget):
         self.item_list.append(item.item_name())
     
     def return_item_list(self):
-        # print(self.item_list)
         return(self.item_list)
 
 
@@ -715,23 +742,19 @@ class ChildControllerListWidget(QListWidget):
         self.clear()
         self.item_list.clear()
     
-    def add_new_item(self):
-        objs_name = object_query_command()
-        for member in objs_name:
-            item = ChildControllerListWidgetItem(member)
+    def add_new_item(self, obj_name="None"):
+            item = ChildControllerListWidgetItem(obj_name)
             self.indexFromItem(item)
 
             self.addItem(item)
-            self.item_list.append(member)
+            self.item_list.append(obj_name)
     
     def delete_current_index(self):
         current_item = self.selectedItems()
         self.item_list.remove(current_item[0].item_name())
-        # print(self.item_list)
         self.takeItem(self.currentRow())
     
     def return_item_list(self):
-        # print(self.item_list)
         return(self.item_list)
     
     #! WIP (in case needed to list all item in the widget at the time)
@@ -791,7 +814,7 @@ class GhostingWidget(QWidget):
         self.bake_layout = QHBoxLayout()
         self.bake_label = QLabel("Initiate Bake Object")
         self.duplicate_obj_button = QPushButton("add")
-        self.delete_obj_button = QPushButton("delete")
+        self.delete_obj_button = QPushButton("remove")
         self.duplicate_obj_button.clicked.connect(self.bake_obj_command)
         self.delete_obj_button.clicked.connect(self.delete_obj_command)
 
@@ -839,7 +862,6 @@ class GhostingWidget(QWidget):
         demo_ghosting_utils.delete_geo_name_key(
             geo_name=current_item_name
             )
-
     
     def set_main_ctrl_text_command(self):
         """
@@ -868,12 +890,17 @@ class BlendingWidget(QWidget):
 
         self.bake_ghost_layout = QHBoxLayout()
         self.bake_ghost_label = QLabel("Bake Ghosting geo")
-        self.bake_ghost_button = QPushButton("Bake selection")
-        self.bake_ghost_button.clicked.connect(self.bake_obj_command)
+        self.duplicate_obj_button = QPushButton("add")
+        self.delete_obj_button = QPushButton("remove")
+        self.duplicate_obj_button.clicked.connect(self.bake_obj_command)
+        self.delete_obj_button.clicked.connect(self.remove_obj_command)
+        self.set_ctrl_button = QPushButton("Set controller")
+        self.set_ctrl_button.clicked.connect(self.set_ctrl_command)
 
         self.bake_ghost_layout.addWidget(self.bake_ghost_label)
-        self.bake_ghost_layout.addWidget(self.bake_ghost_button)
-        self.bake_ghost_layout.addItem(self.horizontal_spacer)
+        self.bake_ghost_layout.addWidget(self.duplicate_obj_button)
+        self.bake_ghost_layout.addWidget(self.delete_obj_button)
+        # self.bake_ghost_layout.addItem(self.horizontal_spacer)
 
         self.ghosting_geo_label = QLabel("Related Ghosting geo:")
         self.ghosting_geo_list = CustomListWidget()
@@ -882,12 +909,35 @@ class BlendingWidget(QWidget):
         self.blending_main_layout.addLayout(self.bake_ghost_layout)
         self.blending_main_layout.addWidget(self.ghosting_geo_label)
         self.blending_main_layout.addWidget(self.ghosting_geo_list)
+        self.blending_main_layout.addWidget(self.set_ctrl_button)
         self.blending_main_layout.addItem(self.spacer)
     
     def bake_obj_command(self):
         obj = object_query_command()
+        list_item = self.ghosting_geo_list.return_item_list()
         for member in obj:
-            self.ghosting_geo_list.get_obj_name(member)
+            if member not in list_item:
+                self.ghosting_geo_list.get_obj_name(member)
+            else:
+                logger.warning(
+                    "Objects with the same name won't be included in the baking process: {item}".format(item=member)
+                    )
+    
+    def set_ctrl_command(self):
+        ghosting_geo_name_list = []
+        ghosting_geo_name_list = (self.ghosting_geo_list.return_item_list())
+        if len(ghosting_geo_name_list) < 1:
+            logger.error("There is no object to set controller.")
+            return
+        lattice_dict = demo_test_blend.create_lattice_from_selected_ghost(ghosting_group=ghosting_geo_name_list,lattice_division=[4,3,3])
+        cluster_grp_lst = demo_test_blend.create_clusters_on_lattice(lattice_edge_loop_dict = lattice_dict)
+        demo_test_blend.snap_controllers_on_cluster(locator_group_list = cluster_grp_lst)
+    
+    def remove_obj_command(self):
+        current_item = self.ghosting_geo_list.selectedItems()
+        current_item_name = current_item[0].item_name()
+        self.ghosting_geo_list.item_list.remove(current_item_name)
+        self.ghosting_geo_list.takeItem(self.ghosting_geo_list.currentRow())
 
 
 class DeleteSmearWindow(QDialog):
@@ -1013,7 +1063,7 @@ class HistoryTableWindow(QMainWindow):
             print("{r},{cl}".format(r=ix.row(),cl=ix.column()))
             if self.main_table.item(ix.row(), 1).item_name() == "B":
                 ctrl_member_list = (self.main_table.item(ix.row(), 3).item_name())
-                cmds.select(ctrl_member_list, add=True)
+                cmds.select(ctrl_member_list, replace=True)
                 if ix.column() == 2:
                     interval_frames_list = ast.literal_eval(self.main_table.item(ix.row(), 2).item_name())
                     self.ghosting_bystep_menu = GhostingByStepMenu(
@@ -1031,7 +1081,7 @@ class HistoryTableWindow(QMainWindow):
                 cmds.currentTime(int(self.main_table.item(ix.row(), 2).item_name()))
                 ctrl_member_list = (self.main_table.item(ix.row(), 3).item_name())
                 cmds.select(clear=True)
-                cmds.select(ctrl_member_list, add=True)
+                cmds.select(ctrl_member_list, replace=True)
     
     def set_interval(self, row_num=0, current_frame=0, frame_list=[]):
         number = "0"
@@ -1081,10 +1131,14 @@ class HistoryTableWindow(QMainWindow):
     def contextMenuEvent(self, event):
         self.menu = QMenu(self)
         edit_action = QAction('Edit', self)
-        edit_action.triggered.connect(lambda: self.edit_ghosting.show())
+        edit_action.triggered.connect(lambda: self.open_edit_ghosting(self.main_table.item((self.main_table.currentRow()), 3).text()))
         self.menu.addAction(edit_action)
-        if len(self.main_table.selectedItems()) > 0:
+        if len(self.main_table.selectedItems()) == 1 and self.main_table.item(self.main_table.currentItem().row(), 0).text() == "ghosting":
             self.menu.popup(QCursor.pos())
+    
+    def open_edit_ghosting(self, main_grp=""):
+        self.edit_ghosting.bake_main_grp(main_grp)
+        self.edit_ghosting.show()
 
     # def edit_slot(self, event):
     #     print "renaming slot called"
@@ -1093,12 +1147,6 @@ class HistoryTableWindow(QMainWindow):
     #     cell = self.tableWidget.item(row, col)
     #     cellText = cell.text()
     #     widget = self.tableWidget.cellWidget(row, col)
-    
-    def test_print_result(self):
-        # print(self.history_item_dict)
-        # print(self.main_table.currentItem().item_name())
-        # print(self.main_table.selectedItems())
-        print(self.main_table.currentRow())
     
     def delete_smear_command(self):
         #! Clear smear in history window
@@ -1173,7 +1221,7 @@ class GhostingByStepMenu(QMenu):
 class EditGhostingWidget(QDialog):
     def __init__(self, parent=ptr):
         super(EditGhostingWidget, self).__init__(parent)
-        self.setFixedSize(QSize(270,70))
+        self.setFixedSize(QSize(280,100))
         self.main_layout = QVBoxLayout()
         self.setLayout(self.main_layout)
 
@@ -1183,13 +1231,22 @@ class EditGhostingWidget(QDialog):
         self.button_layout = QHBoxLayout()
         self.label = QLabel("Ghosting visibility duration:")
         self.end_label = QLabel("frame")
-        self.spinbox = QSpinBox()
+        self.spinbox = QDoubleSpinBox()
+        self.horizontal_layout_above = QHBoxLayout()
+        self.maingroup_label = QLabel("Children of:")
+        self.maingroup_lineedit = QLineEdit()
+        self.maingroup_lineedit.setEnabled(False)
+        self.maingroup_button = QPushButton("Select")
         #todo set value of the spinbox as current duration
-        self.spinbox.setValue(1)
-        self.spinbox.setMaximum(100000)
+        self.spinbox.setValue(1.0)
+        self.spinbox.setMaximum(100000.0)
 
         self.ok_button = QPushButton("OK")
+        self.ok_button.clicked.connect(lambda: self.edit_vis_duration_command(new_frame=self.spinbox.value()))
         self.cancel_button = QPushButton("Cancel")
+
+        self.horizontal_layout_above.addWidget(self.maingroup_label)
+        self.horizontal_layout_above.addWidget(self.maingroup_lineedit)
 
         self.horizontal_layout.addWidget(self.label)
         self.horizontal_layout.addWidget(self.spinbox)
@@ -1198,8 +1255,25 @@ class EditGhostingWidget(QDialog):
         self.button_layout.addWidget(self.ok_button)
         self.button_layout.addWidget(self.cancel_button)
 
+        self.main_layout.addLayout(self.horizontal_layout_above)
         self.main_layout.addLayout(self.horizontal_layout)
         self.main_layout.addLayout(self.button_layout)
+    
+    def edit_vis_duration_command(self, new_frame=0.0):
+        main_grp = self.maingroup_lineedit.text()
+        main_children = cmds.listRelatives(main_grp, children=True)
+        for node in main_children:
+            keylist = cmds.keyframe(node, q=True)
+            cmds.currentTime(keylist[-1])
+            cmds.cutKey(node,
+                        attribute='visibility', time=(keylist[-1], keylist[-1]), clear=True)
+            new_keyframe = keylist[-2]+new_frame
+            cmds.currentTime(new_keyframe)
+            cmds.setKeyframe(node,
+                        attribute='visibility', time=new_keyframe, value=0)
+    
+    def bake_main_grp(self, main_grp=""):
+        self.maingroup_lineedit.setText(main_grp)
 
 
 def object_query_command(quantity=""):
@@ -1321,6 +1395,7 @@ def go_to_web():
     webbrowser.open('https://www.youtube.com/watch?v=dQw4w9WgXcQ')
 
 def run():
+    # demo_ghosting_utils.test_print()
 	maya_ptr = omui.MQtUtil.mainWindow()
 	ptr = wrapInstance(int(maya_ptr), QWidget)
 
