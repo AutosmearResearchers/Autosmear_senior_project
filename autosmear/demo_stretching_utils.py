@@ -3,6 +3,7 @@ import maya.cmds as cmds
 import maya.mel as mel
 import numpy as np
 import ast
+import maya.OpenMayaUI as omui
 
 def get_values(
     start_frame=1,
@@ -50,6 +51,10 @@ def get_values(
         else:
              smear_frame = calculate_custom_smear(custom_frame)     #custom smear
              smear_subtype = "C"
+
+        if camera_space == True:
+            smear_frame = calculate_velocity_from_camera_space(start_frame, end_frame, ctrl_hierarchy)
+        
         #! using function to keyframe the stretch smear effect (by ctrl)
         stretch_ctrl(start_frame,end_frame,start_ctrl,smear_frame,ctrl_hierarchy,multiplier,smear_subtype)
 
@@ -60,13 +65,26 @@ def get_values(
         attribute_value_list = find_attribute_range(raw_squash_attribute,master_squash_attribute)
         #! using function to calculate the velocity of the obj from start_frame to end_frame
         if smear_option == 1:
-            smear_frame = calculate_velocity(start_frame,end_frame,ctrl_hierarchy)  #auto smear
+            smear_subtype = "A"
+            smear_frame = calculate_velocity(start_frame,end_frame,ctrl_hierarchy=tmp_attr_list)  #auto smear
         elif smear_option == 2:
+            smear_subtype = "B"
             smear_frame = calculate_interval_smear(start_frame,end_frame,interval)  #interval smear
         else:
-             smear_frame = calculate_custom_smear(custom_frame)     #custom smear
+            smear_subtype = "C"
+            smear_frame = calculate_custom_smear(custom_frame)     #custom smear
+        
+        if camera_space == True:
+            smear_frame = calculate_velocity_from_camera_space(start_frame, end_frame, ctrl_hierarchy)
         #! using function to keyframe the stretch smear effect (by attr)
-        stretch_attribute(smear_frame,end_frame,master_squash_attribute,raw_squash_attribute,attribute_value_list,multiplier)
+        stretch_attribute(
+            smear_frame,
+            end_frame,
+            master_squash_attribute,
+            raw_squash_attribute,
+            attribute_value_list,
+            multiplier,
+            smear_subtype)
 
 def find_attribute_range(raw_squash_attribute = "",master_squash_attribute = ""):
     """
@@ -80,7 +98,7 @@ def find_attribute_range(raw_squash_attribute = "",master_squash_attribute = "")
     attribute_default = cmds.attributeQuery(raw_squash_attribute,node = master_squash_attribute,listDefault = True)
     return([attribute_max[0], attribute_default[0]])
 
-def stretch_attribute(smear_frames=[],end_frame = 1,master_squash_attribute="",raw_squash_attribute="",attribute_value_list=[],multiplier=1.0):
+def stretch_attribute(smear_frames=[],end_frame = 1,master_squash_attribute="",raw_squash_attribute="",attribute_value_list=[],multiplier=1.0,smear_subtype=""):
     """
     keyframing function
     this function is developed to support calculations in both cases;
@@ -103,6 +121,7 @@ def stretch_attribute(smear_frames=[],end_frame = 1,master_squash_attribute="",r
     else:
          multiplier = 1
     
+    print(smear_frames)
     for smear_frame in smear_frames:
         #! keyframe the frame before smear_frame
         cmds.currentTime(smear_frame - 1)
@@ -118,6 +137,26 @@ def stretch_attribute(smear_frames=[],end_frame = 1,master_squash_attribute="",r
         cmds.currentTime(end_frame)
         cmds.setAttr(attribute,original_stretch_value)
         cmds.setKeyframe(attribute,breakdown = False, preserveCurveShape = False, hierarchy = "None",controlPoints= False, shape = False)
+
+        order_num = 1
+        full_path = cmds.listRelatives(master_squash_attribute, ap=True)[0]
+        # full_path = full_path_list[0].split('|')[1]
+        last_history = cmds.listAttr(full_path, ud=True)
+
+        if last_history is not None:
+            if len(last_history) > 0:
+                for each_smear in last_history:
+                    if each_smear.split("_s")[0] == "stretching":
+                        smear_count_list.append(each_smear)
+
+                if len(smear_count_list) > 0:
+                    order_num = int((smear_count_list[-1]).split("_s")[1]) + 1
+
+        history_dict = "{frame}||{type}||{ctrl}".format(frame=smear_frame, type=smear_subtype, ctrl=master_squash_attribute)
+        attr_naming = "stretching_s{order}".format(order=order_num)
+
+        cmds.addAttr(full_path, ln=attr_naming, dt="string")
+        cmds.setAttr("{grp_path}.{attr_name}".format(grp_path=full_path,attr_name = attr_naming), history_dict, type="string", lock = True)
 
 def get_ctrl_hierarchy(start_ctrl = "",end_ctrl = ""):
     """
@@ -205,6 +244,7 @@ def worldSpaceToScreenSpace(camera, worldPoint):
 
     # get the dagPath to the camera shape node to get the world inverse matrix
     sel_lst = om.MSelectionList()
+    print(camera)
     sel_lst.add(camera)
     dagPath = om.MDagPath()
     sel_lst.getDagPath(0, dagPath)
@@ -225,6 +265,19 @@ def worldSpaceToScreenSpace(camera, worldPoint):
 
     return [x, y]
 
+def find_current_camera():
+    """
+    find_current_camera()
+    finding the active camera. Returns string.
+    """
+    view = omui.M3dView.active3dView()
+    cam = om.MDagPath()
+    view.getCamera(cam)
+    cam_path = cam.fullPathName()
+
+    cam_name = cam_path[1:cam_path.rfind('|')]
+
+    return cam_name
 def calculate_velocity_from_camera_space(start_frame=1,end_frame=1,ctrl_hierarchy=[]):
     """
     calculate_velocity_from_camera_space()
@@ -241,13 +294,16 @@ def calculate_velocity_from_camera_space(start_frame=1,end_frame=1,ctrl_hierarch
     s = []  # ? list of position difference
     n = 0  # ? dynamic array index
     smear_frame = start_frame
+    camera = find_current_camera()
+    print(camera)
+
     
     for frame_number in range(start_frame,end_frame):
         #todo finding position vector of the end_ctrl for each frame
         cmds.currentTime(frame_number)
         worldPosition = cmds.xform(
             end_ctrl, query=True, translation=True, worldSpace=True)
-        pos_vector = worldSpaceToScreenSpace(camera='persp',worldPoint=worldPosition) #!NOTE: Change the camera!
+        pos_vector = worldSpaceToScreenSpace(camera=camera,worldPoint=worldPosition)  # //NOTE: Change the camera!
         pos_list.append(pos_vector)
 
         # todo Since, s = pos_list[n] - pos_list[n-1] ==> at n = 0; s = pos_list[0] - 0

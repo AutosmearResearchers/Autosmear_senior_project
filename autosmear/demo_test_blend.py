@@ -266,8 +266,10 @@ def group_blending_components(sub_grp = ''):
             blending_components.append(each_child)
 
     sr_no = sub_grp[sub_grp.rfind('_')+1:]
+    main_grp = cmds.listRelatives(sub_grp, parent=True)[0]
+    prefix = main_grp[main_grp.rfind('_')+1:]
     blending_grp_name = cmds.group(blending_components, 
-                                   name = 'Autosmear_blendingGrp_{sr_no}'.format(sr_no = sr_no))
+                                   name = 'Autosmear_{pre}_blendingGrp_{sr_no}'.format(sr_no = sr_no,pre=prefix))
     
     return blending_grp_name
 
@@ -279,6 +281,10 @@ def get_stretching_value(
 
     #todo calculate the stretch
     stretch_blending_ctrl(ctrl_ID)
+
+    #todo create history
+    tmp_building_func_component(sub_grp_lst)
+
 
 def get_blending_ctrl_data(sub_grp_lst = []):
     '''
@@ -293,7 +299,7 @@ def get_blending_ctrl_data(sub_grp_lst = []):
     blend_grp_lst = []
     for sub_grp in sub_grp_lst:
         blend_grp_lst.append([each for each in cmds.listRelatives(sub_grp)
-                        if 'Autosmear_blendingGrp_' in each][0])
+                        if '_blendingGrp_' in each][0])
     
     #! from the blending_grp_lst, query the ctrl grp
     blending_ctrl_ID = {}
@@ -380,3 +386,29 @@ def stretch_blending_ctrl(ctrl_ID = {}):
 
             #! updation
             index-=1
+
+def tmp_building_func_component(main_ghosting_grp=[]):
+    #! create history dict and record history of smear
+    order_num = 1
+    smear_count_list = []
+    for member in main_ghosting_grp:
+        used_frame = (cmds.keyframe(member, q=True))[1]
+        full_path_list = cmds.listRelatives(member, fullPath=True)
+        full_path = full_path_list[0].split('|')[1]
+        last_history = cmds.listAttr(full_path, ud=True)
+
+        if last_history is not None:
+            if len(last_history) > 0:
+                for each_smear in last_history:
+                    if each_smear.split("_s")[0] == "Blending":
+                        smear_count_list.append(each_smear)
+
+                if len(smear_count_list) > 0:
+                    order_num = int((smear_count_list[-1]).split("_s")[1]) + 1
+
+        history_dict = "{frame}||{main_grp}".format(frame=used_frame, main_grp=full_path)
+        attr_naming = "Blending_s{order}".format(order=order_num)
+
+        cmds.addAttr(full_path, ln=attr_naming, dt="string")
+        cmds.setAttr("{grp_path}.{attr_name}".format(grp_path=full_path,attr_name = attr_naming), history_dict, type="string", lock = True)
+

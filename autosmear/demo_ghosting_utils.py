@@ -5,6 +5,7 @@ import numpy as np
 import os
 import json
 import maya.OpenMaya as om
+import maya.OpenMayaUI as omui
 
 '''
 NOTE: for testing the NCrig paste this in the script editor
@@ -117,9 +118,24 @@ def worldSpaceToScreenSpace(camera, worldPoint):
 
     return [x, y]
 
+def find_current_camera():
+    """
+    find_current_camera()
+    finding the active camera. Returns string.
+    """
+    view = omui.M3dView.active3dView()
+    cam = om.MDagPath()
+    view.getCamera(cam)
+    cam_path = cam.fullPathName()
+
+    cam_name = cam_path[1:cam_path.rfind('|')]
+
+    return cam_name
+
 def calculate_velocity_from_camera_space(start_frame=1, end_frame=1, ctrl_hierarchy=[]):
     """
     calculate_velocity_from_camera_space()
+    This function calculates the smear frame of the object based on its velocity wrt camera spaces
 
     Args:
         start_frame (int): start keyframe
@@ -133,6 +149,7 @@ def calculate_velocity_from_camera_space(start_frame=1, end_frame=1, ctrl_hierar
     s = []  # ? list of position difference
     n = 0  # ? dynamic array index
     smear_frame = start_frame
+    camera = find_current_camera()
 
     for frame_number in range(start_frame, end_frame):
         # todo finding position vector of the end_ctrl for each frame
@@ -140,7 +157,7 @@ def calculate_velocity_from_camera_space(start_frame=1, end_frame=1, ctrl_hierar
         worldPosition = cmds.xform(
             end_ctrl, query=True, translation=True, worldSpace=True)
         pos_vector = worldSpaceToScreenSpace(
-            camera='persp', worldPoint=worldPosition)  # !NOTE: Change the camera!
+            camera=camera, worldPoint=worldPosition)  #//NOTE: Change the camera!
         pos_list.append(pos_vector)
 
         # todo Since, s = pos_list[n] - pos_list[n-1] ==> at n = 0; s = pos_list[0] - 0
@@ -338,7 +355,7 @@ def get_values(
     ghosting_lst = json.load(read_file)
     read_file.close()
 
-    #! calculate the smear_frame  as a list
+    #! calculate the smear_frame as a list
     #todo identify current smear frame(s)
     q_smear_frames = ""
     smear_subtype = ""
@@ -356,8 +373,14 @@ def get_values(
         q_smear_frames = "{current}".format(current=custom_frame)
         smear_subtype = "C"
 
-    sub_grp_lst = [] #?list containing all the sub_grp(s)
+    if camera_space == True:
+        smear_frames = calculate_velocity_from_camera_space(start_frame, end_frame, main_ctrl)  # auto smear with camera space
+        q_smear_frames = "{current}".format(current=smear_frames[0])
 
+    sub_grp_lst = [] #?list containing all the sub_grp(s)
+    current_grp_name = cmds.group(
+        empty = True, name='Autosmear_ghostingGrp_001')
+    
     for current_frame in smear_frames:
         ghosting_geo_list = []  # ? a list stored all the ghosting geometry generated
         
@@ -377,8 +400,10 @@ def get_values(
                 remove_non_selected_faces(duplicate_geo_name, face_ID_list)
         
         #todo create sub_grp
+        subGrp_prefix = 'Autosmear'+current_grp_name[current_grp_name.rfind('_'):]
         ctrl_matrix = (cmds.xform(main_ctrl[0], q=True, m=True, ws=True))
-        sub_grp = bake_transform_to_parent_matrix(ctrl_matrix,ghosting_geo_list)
+        sub_grp = bake_transform_to_parent_matrix(
+            ctrl_matrix, ghosting_geo_list, subGrp_prefix)
         sub_grp_lst.append(sub_grp)
         
         #todo key the sub_grp
@@ -395,8 +420,8 @@ def get_values(
         cmds.setKeyframe(sub_grp,
                          attribute='visibility', time=current_frame+visibility_keyframe, value=0)
 
-    current_grp_name = cmds.group(sub_grp_lst,name = 'Autosmear_ghostingGrp_001')
-    
+    cmds.parent(sub_grp_lst,current_grp_name)
+
     #! store the shaders for the ghosting object
     store_material_SG(current_grp_name)
     
@@ -411,7 +436,7 @@ def get_values(
     cmds.addAttr(current_grp_name, ln="smear_history", dt="string")
     cmds.setAttr("{grp}.{attr_name}".format(grp=current_grp_name, attr_name = "smear_history"), history_dict, type="string", lock = True)
 
-def bake_transform_to_parent_matrix(ctrl_matrix=[], ghosting_geos=[]):
+def bake_transform_to_parent_matrix(ctrl_matrix=[], ghosting_geos=[], grp_name=""):
     #! create tmp_grp for Ghosting geos & find its world translation
     cmds.group(ghosting_geos, n="tmp_grp")
     tmp_grp_translation = cmds.xform("tmp_grp", query=True, scalePivot=True)
@@ -423,13 +448,23 @@ def bake_transform_to_parent_matrix(ctrl_matrix=[], ghosting_geos=[]):
     ctrl_matrix.append(1.0)
 
     #! create sub group at (0,0,0) & set offsetParentMatrix
-    grp_command = cmds.group(em=True, n="Ghosting_SubGrp_001")
+    new_grp_name = "{prefix}_{postfix}".format(
+        prefix=grp_name, postfix='Ghosting_SubGrp_001')
+    grp_command = cmds.group(em=True, n=new_grp_name)
     cmds.setAttr("{subgrp}.offsetParentMatrix".format(
         subgrp=grp_command), ctrl_matrix, type="matrix")
 
     #! move Ghosting geos into Ghosting_SubGrp & delete tmp_grp
     cmds.parent(ghosting_geos, grp_command)
     cmds.delete("tmp_grp")
+
+    grp_children = cmds.listRelatives(grp_command, allDescendents=True)
+    for each_child in grp_children:
+        try:
+            cmds.rename(each_child,
+                        '{new_grp_name}_{each_child}'.format(new_grp_name=grp_command, each_child=each_child))
+        except:
+            continue
 
     return grp_command
 
@@ -444,7 +479,7 @@ def duplicate_geometry(ghosting_object=''):
     '''
     
     #todo duplicate the entire geometry
-    new_name = '{ghost_name}__Autosmear_ghost_obj_001'.format(ghost_name=ghosting_object)
+    new_name = '{ghost_name}__Autosmear_ghost_obj'.format(ghost_name=ghosting_object)
     duplicate_geo = cmds.duplicate(ghosting_object,name = new_name)
     cmds.parent(duplicate_geo,world=True)
     
@@ -518,7 +553,7 @@ def store_material_SG(ghostingGrp=''):
     #todo obtain the key value pair for creating the dictionary  
     for long_name in raw_dag:       
         # ! obtain the long name from tranversing the raw_dag list a.k.a. value  
-        if '__Autosmear_ghost_obj_' in long_name and 'Shape' not in long_name:
+        if '__Autosmear_ghost_obj' in long_name and 'Shape' not in long_name:
             
             # ! obtain the SG
             shaders = cmds.ls(cmds.listHistory(long_name,future = True),type='shadingEngine')
