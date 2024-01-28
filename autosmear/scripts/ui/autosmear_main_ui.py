@@ -1,4 +1,15 @@
 """
+# Autosmear Tool - Python Script
+
+# Latest Version: 1.0.0
+# Release Dates
+#   - 1.0.0: Jan 29, 2024
+# DESCRIPTION: Tool for quick scale adjustment
+# REQUIRE: Python2-Python3
+# AUTHOR: BulinThira - GitHub
+
+
+
 #run this script in Maya Script Editor after putting the .py file in the maya scripts folder
 
 from importlib import reload
@@ -42,7 +53,7 @@ class MainWidget(QMainWindow):
         super(MainWidget, self).__init__(*args, **kwargs)
 
         self.resize(320, 730)
-        self.setWindowTitle("Autosmear Tool")
+        self.setWindowTitle("Autosmear Tool v.1.0.0")
 
         self.stretching_feature = StretchingWidget()
         self.ghosting_feature = GhostingWidget()
@@ -448,14 +459,16 @@ class MainWidget(QMainWindow):
     def delete_command(self):
         if self.delete_button.text() == "Delete Stretching":
             stretching_main_node = find_stretching_history()
-            for key in (stretching_main_node):
-                if key is not None:
-                    if len(histo_list) > 1:
-                        show_delete_miniwindow(smear_type="stretching")
-                    elif len(histo_list) == 1:
-                        clear_command(current_history_attr="", type_smear="stretching")
+            if len(stretching_main_node) > 0:
+                if len(stretching_main_node) == 1:
+                        if len(stretching_main_node[list(stretching_main_node.keys())[0]]) == 1:
+                            clear_command(current_history_attr=(list(stretching_main_node.values())[0])[0], type_smear="stretching")
+                        else:
+                            show_delete_miniwindow(smear_type="stretching")
                 else:
-                    logger.error("No Autosmear has been created.")
+                    show_delete_miniwindow(smear_type="stretching")
+            else :
+                logger.error("No Autosmear has been created.")
         elif self.delete_button.text() == "Delete Ghosting":
             autosmear_ghosting_grp = []
             referred_group = cmds.ls(assemblies=True)
@@ -991,14 +1004,16 @@ class DeleteSmearWindow(QDialog):
     
     def delete_latest_smear(self):
         if ui.delete_button.text() == "Delete Stretching":
-            clear_command(current_history_attr="-1", type_smear="stretching")
+            stretching_main_node = find_stretching_history()
+            print(((list(stretching_main_node.values()))[0])[-1])
+            clear_command(current_history_attr=((list(stretching_main_node.values()))[0])[-1], type_smear="stretching", latest=True)
         elif ui.delete_button.text() == "Delete Ghosting":
             autosmear_ghosting_grp = []
             referred_group = cmds.ls(assemblies=True)
             for member in referred_group:
                 if member.startswith("Autosmear_ghostingGrp") is True:
                     autosmear_ghosting_grp.append(member)
-            clear_command(current_history_attr="0", type_smear="ghosting", ghosting_grp=autosmear_ghosting_grp[-1])
+            clear_command(current_history_attr="", type_smear="ghosting", ghosting_grp=autosmear_ghosting_grp[-1])
         self.close()
     
     def open_history_window(self):
@@ -1394,14 +1409,17 @@ def show_history_window():
 	table_window = HistoryTableWindow(parent=ptr)
 	table_window.show()
 
-def clear_command(current_history_attr="", type_smear="", ghosting_grp=""):
+def clear_command(current_history_attr="", type_smear="", ghosting_grp="", latest=False):
     if type_smear == "stretching":
         stretching_main_node = find_stretching_history()
         for key in (stretching_main_node):
             for value in stretching_main_node[key]:
-                print("key --> ", key, "value --> ", value)
-                print("current_history_attr --> ", current_history_attr)
+                # print("key --> ", key, "value --> ", value)
+                # print("current_history_attr --> ", current_history_attr)
                 if value == current_history_attr:
+                    if latest:
+                        if key != list(stretching_main_node.keys())[-1]:
+                            continue
                     smear_history = "{node}.{attr}".format(node=key,attr=value)
                     history_string_list = (cmds.getAttr(smear_history)).split("||")
                     converted_ctrl_string_list = ast.literal_eval(history_string_list[-1])
@@ -1417,6 +1435,9 @@ def clear_command(current_history_attr="", type_smear="", ghosting_grp=""):
                             last_ctrl=converted_ctrl_string_list[-1], timeframe=str(current_time-1)))
     elif type_smear == "ghosting":
         cmds.delete(ghosting_grp)
+    elif type_smear == "blending":
+        cmds.delete(ghosting_grp)
+
 
 def find_stretching_history():
     """
