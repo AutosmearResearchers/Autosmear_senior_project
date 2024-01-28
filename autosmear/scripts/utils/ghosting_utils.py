@@ -300,7 +300,7 @@ def clear_face_ID_data():
     if os.path.exists(full_path):
         os.remove(full_path)
     else:
-        print("wth???")
+        # print("wth???")
         return
 
 def delete_geo_name_key(geo_name = ''):
@@ -622,5 +622,5 @@ def clear_SG_data():
     if os.path.exists(full_path):
         os.remove(full_path)
     else:
-        print("wth???")
+        # print("wth???")
         return
