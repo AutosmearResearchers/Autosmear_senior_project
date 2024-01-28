@@ -7,7 +7,7 @@ setParent $currentShelf;
 // Create tool name and path command
 string $scriptLocation = `scriptLocation`;
 string $toolNaming = "AutoSmear";
-string $command = "import sys\nfrom importlib import reload\ntoolPath = '" + $scriptLocation + "scripts'\nsystemPath = sys.path\nif toolPath not in systemPath:\n    systemPath.append(toolPath)\nimport ui.autosmear_main_ui as mainUI\nimport utils.ghosting_utils as fileCheck\nreload(mainUI)\nreload(fileCheck)\nfileCheck.clear_face_ID_data()\nmainUI.run()";
+string $command = "import sys\nfrom importlib import reload\ntoolPath = '" + $scriptLocation + "scripts'\nsystemPath = sys.path\nif toolPath not in systemPath:\n    systemPath.append(toolPath)\ntry:\n    import numpy as np\nexcept ImportError:\n    import utils.setup as su\n    su.install_lib()\nimport ui.autosmear_main_ui as mainUI\nimport utils.ghosting_utils as fileCheck\nreload(mainUI)\nreload(fileCheck)\nfileCheck.clear_face_ID_data()\nmainUI.run()";
 
 
 // Install button to current shelf
@@ -27,9 +27,9 @@ global proc string scriptLocation ()
     string $whatIs=`whatIs scriptLocator`;
     string $fullPath=`substring $whatIs 25 999`;
     string $buffer[];
-    int $numTok=`tokenize $fullPath "/" $buffer`;
-    int $numLetters=size($fullPath);
-    int $numLettersLastFolder=size($buffer[$numTok-1]);
-    string $scriptLocation=`substring $fullPath 1 ($numLetters-$numLettersLastFolder)`;
+    int $tok=`tokenize $fullPath "/" $buffer`;
+    int $numLetter=size($fullPath);
+    int $numLetterLastFolder=size($buffer[$tok-1]);
+    string $scriptLocation=`substring $fullPath 1 ($numLetter-$numLetterLastFolder)`;
     return $scriptLocation;
 }
