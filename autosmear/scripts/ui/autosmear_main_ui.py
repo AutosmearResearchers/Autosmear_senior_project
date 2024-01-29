@@ -1460,7 +1460,7 @@ def find_stretching_history():
     return(grp_with_history)
 
 def go_to_web():
-    webbrowser.open('https://www.youtube.com/watch?v=dQw4w9WgXcQ')
+    webbrowser.open('https://youtu.be/Yllz-8T4-h4')
 
 def run():
     # ghosting_utils.test_print()
