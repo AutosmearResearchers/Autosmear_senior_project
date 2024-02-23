@@ -6,10 +6,8 @@ import os
 import json
 import maya.OpenMaya as om
 import maya.OpenMayaUI as omui
-from importlib import reload
 
-from utils import history_control
-reload(history_control)
+from autosmear_utils import history_control
 
 '''
 NOTE: for testing the NCrig paste this in the script editor
@@ -62,9 +60,10 @@ def calculate_velocity(start_frame=1,end_frame=1,ctrl_hierarchy=[]):
     n = 0     #? dynamic array index
     smear_frame = start_frame
 
-    for frame_number in range(start_frame,end_frame):
+    for ind, frame_number in enumerate(range(start_frame,end_frame)):
         #todo finding position vector of the main_ctrl for each frame
-        cmds.currentTime(frame_number)
+        if ind == 0:
+            cmds.currentTime(frame_number)
         pos_vector = np.array(cmds.xform(main_ctrl,query=True,translation=True,worldSpace=True))
         # print(cmds.xform(main_ctrl,query=True,translation=True,worldSpace=True))
         pos_list.append(pos_vector)
@@ -91,7 +90,6 @@ def calculate_velocity(start_frame=1,end_frame=1,ctrl_hierarchy=[]):
         if a>max_a:
             max_a = a
             smear_frame = vi + start_frame
-    print(f'SMEAR FRAME AT:{smear_frame}')
     return [smear_frame]
 
 def worldSpaceToScreenSpace(camera, worldPoint):
@@ -386,6 +384,7 @@ def get_values(
         empty = True, name='Autosmear_ghostingGrp_001')
     
     for current_frame in smear_frames:
+        cmds.currentTime(current_frame)
         ghosting_geo_list = []  # ? a list stored all the ghosting geometry generated
         
         # todo transversing through each object face_ID
@@ -433,15 +432,6 @@ def get_values(
     history_control.create_history_attr(
         current_grp_name, "ghosting", q_smear_frames, smear_subtype, current_grp_name
     )
-    # order_num = 1
-    # smear_count_list = []
-
-    # history_dict = "{frame}||{type}||{ghost_grp}".format(frame=q_smear_frames, type=smear_subtype, ghost_grp=current_grp_name)
-    # attr_naming = "ghosting_s{order}".format(order=order_num)
-
-    # #! EDIT: keep history attr in the ghosting_grp itself
-    # cmds.addAttr(current_grp_name, ln="smear_history", dt="string")
-    # cmds.setAttr("{grp}.{attr_name}".format(grp=current_grp_name, attr_name = "smear_history"), history_dict, type="string", lock = True)
 
 def bake_transform_to_parent_matrix(ctrl_matrix=[], ghosting_geos=[], grp_name=""):
     #! create tmp_grp for Ghosting geos & find its world translation
@@ -528,7 +518,8 @@ def remove_non_selected_faces(ghosting_name = '',face_ID_list = []):
         if current_face not in all_selected_faces:
             all_delete_faces.append(current_face)
     
-    cmds.polyDelFacet(all_delete_faces)
+    if all_delete_faces:
+        cmds.polyDelFacet(all_delete_faces)
 
 def store_material_SG(ghostingGrp=''):
     '''

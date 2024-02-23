@@ -4,10 +4,11 @@ import maya.mel as mel
 import numpy as np
 import ast
 import maya.OpenMayaUI as omui
-from importlib import reload
+import logging
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
 
-from utils import history_control
-reload(history_control)
+from autosmear_utils import history_control
 
 def get_values(
     start_frame=1,
@@ -47,7 +48,7 @@ def get_values(
         # ctrl_hierarchy = get_ctrl_hierarchy(start_ctrl,end_ctrl)
         #! using function to calculate the velocity of the obj from start_frame to end_frame
         if smear_option == 1:
-            smear_frame = calculate_velocity(start_frame,end_frame,ctrl_hierarchy)  #auto smear
+            smear_frame = calculate_velocity(start_frame,end_frame,[start_ctrl])  #auto smear
             smear_subtype = "A"
         elif smear_option == 2:
             smear_frame = calculate_interval_smear(start_frame,end_frame,interval)  #interval smear
@@ -57,10 +58,14 @@ def get_values(
              smear_subtype = "C"
 
         if camera_space == True:
-            smear_frame = calculate_velocity_from_camera_space(start_frame, end_frame, ctrl_hierarchy)
+            smear_frame = calculate_velocity_from_camera_space(start_frame, end_frame, [start_frame])
         
         #! using function to keyframe the stretch smear effect (by ctrl)
-        stretch_ctrl(start_frame,end_frame,start_ctrl,smear_frame,ctrl_hierarchy,multiplier,smear_subtype)
+        if history_control.check_unique(start_ctrl, smear_frame, ctrl_hierarchy, smear_subtype):
+            stretch_ctrl(start_frame,end_frame,start_ctrl,smear_frame,ctrl_hierarchy,multiplier,smear_subtype)
+        else:
+            logger.warning("Existing smear: skip creating")
+            return
 
     else:
         tmp_attr_list = []
@@ -79,7 +84,7 @@ def get_values(
             smear_frame = calculate_custom_smear(custom_frame)     #custom smear
         
         if camera_space == True:
-            smear_frame = calculate_velocity_from_camera_space(start_frame, end_frame, ctrl_hierarchy)
+            smear_frame = calculate_velocity_from_camera_space(start_frame, end_frame, ctrl_hierarchy=tmp_attr_list)
         #! using function to keyframe the stretch smear effect (by attr)
         stretch_attribute(
             smear_frame,
@@ -282,6 +287,7 @@ def find_current_camera():
     cam_name = cam_path[1:cam_path.rfind('|')]
 
     return cam_name
+
 def calculate_velocity_from_camera_space(start_frame=1,end_frame=1,ctrl_hierarchy=[]):
     """
     calculate_velocity_from_camera_space()
@@ -291,7 +297,7 @@ def calculate_velocity_from_camera_space(start_frame=1,end_frame=1,ctrl_hierarch
         end_frame (int): end keyframe
         ctrl_hierarchy (list): list of hierarchical controller
     """
-    end_ctrl = ctrl_hierarchy[-1]
+    start_ctrl = ctrl_hierarchy[0]
     pos_list = []
     velocity = []  # ?List of all the velocity
     max_a = 0  # ? peak acceleration
@@ -303,10 +309,10 @@ def calculate_velocity_from_camera_space(start_frame=1,end_frame=1,ctrl_hierarch
 
     
     for frame_number in range(start_frame,end_frame):
-        #todo finding position vector of the end_ctrl for each frame
+        #todo finding position vector of the start_ctrl for each frame
         cmds.currentTime(frame_number)
         worldPosition = cmds.xform(
-            end_ctrl, query=True, translation=True, worldSpace=True)
+            start_ctrl, query=True, translation=True, worldSpace=True)
         pos_vector = worldSpaceToScreenSpace(camera=camera,worldPoint=worldPosition)  # //NOTE: Change the camera!
         pos_list.append(pos_vector)
 
@@ -351,11 +357,18 @@ def calculate_custom_smear(custom_frame=1):
      return [custom_frame]
 
 def stretch_ctrl(start_frame=1,end_frame=1,start_ctrl="",smear_frames = [],ctrl_hierarchy = [],multiplier = 1.0,smear_subtype = ""):
-    number_of_ctrl = len(ctrl_hierarchy)
+    number_of_ctrl = len(ctrl_hierarchy)-1
+    
+    if ctrl_hierarchy[0] != start_ctrl:
+        ctrl_hierarchy = ctrl_hierarchy[::-1]
+    if start_ctrl in ctrl_hierarchy:
+        ctrl_hierarchy.remove(start_ctrl)
+    
     locator_list = []
     used_ctrl=[start_ctrl]
     for smear_frame in smear_frames:
-        for number in range(1,number_of_ctrl):
+        for number in range(number_of_ctrl):
+
             #todo keyframe start/end frame first!
             cmds.currentTime(start_frame)
             cmds.setKeyframe(ctrl_hierarchy[number],breakdown = False, preserveCurveShape = False, hierarchy = "None",controlPoints= False, shape = False)
@@ -363,16 +376,15 @@ def stretch_ctrl(start_frame=1,end_frame=1,start_ctrl="",smear_frames = [],ctrl_
             cmds.setKeyframe(ctrl_hierarchy[number],breakdown = False, preserveCurveShape = False, hierarchy = "None",controlPoints= False, shape = False)
 
             #todo create ctrl on the smear_frame
-            
             cmds.currentTime(smear_frame)
-            ctrl_transaltion = cmds.xform(ctrl_hierarchy[number],query=True,translation=True,worldSpace=True)
+            ctrl_translation = cmds.xform(ctrl_hierarchy[number],query=True,translation=True,worldSpace=True)
         
             #todo create locator on the location
             if cmds.objExists("{ctrlHie}_{frame}_autoSmearTool_LOC".format(frame=smear_frame,ctrlHie = ctrl_hierarchy[number])) is False:    
                 loc = cmds.spaceLocator(name = "{ctrlHie}_{frame}_autoSmearTool_LOC".format(frame=smear_frame,ctrlHie = ctrl_hierarchy[number]))
                 locator_list.append(loc[0])
                 #!get and set the locator value
-                cmds.xform(loc,translation=ctrl_transaltion,worldSpace=True)
+                cmds.xform(loc,translation=ctrl_translation,worldSpace=True)
                 loc_translate = cmds.xform(loc,query=True,translation=True,worldSpace=True)
                 #!snap the ctrl to locator
                 cmds.xform(ctrl_hierarchy[number],translation=loc_translate,worldSpace=True)
@@ -385,29 +397,10 @@ def stretch_ctrl(start_frame=1,end_frame=1,start_ctrl="",smear_frames = [],ctrl_
     
         #todo group all the locators created after the iteration is complete
         loc_group = cmds.group(locator_list,name = "{ctrlHie}_{frame}_autoSmearTool_LOC_grp".format(frame=smear_frame,ctrlHie = ctrl_hierarchy[number]))
+        cmds.delete(loc_group)
         locator_list = []
 
     #! create history dict and record history of smear
     history_control.create_history_attr(
         start_ctrl, "stretching", used_frame, smear_subtype, str(used_ctrl)
     )
-    # order_num = 1
-    # smear_count_list = []
-    # full_path_list = cmds.listRelatives(start_ctrl, fullPath=True)
-    # full_path = full_path_list[0].split('|')[1]
-    # last_history = cmds.listAttr(full_path, ud=True)
-
-    # if last_history is not None:
-    #     if len(last_history) > 0:
-    #         for each_smear in last_history:
-    #             if each_smear.split("_s")[0] == "stretching":
-    #                 smear_count_list.append(each_smear)
-
-    #         if len(smear_count_list) > 0:
-    #             order_num = int((smear_count_list[-1]).split("_s")[1]) + 1
-
-    # history_dict = "{frame}||{type}||{ctrl}".format(frame=used_frame, type=smear_subtype, ctrl=used_ctrl)
-    # attr_naming = "stretching_s{order}".format(order=order_num)
-
-    # cmds.addAttr(full_path, ln=attr_naming, dt="string")
-    # cmds.setAttr("{grp_path}.{attr_name}".format(grp_path=full_path,attr_name = attr_naming), history_dict, type="string", lock = True)
