@@ -7,11 +7,11 @@ setParent $currentShelf;
 // Create tool name and path command
 string $scriptLocation = `scriptLocation`;
 string $toolNaming = "AutoSmear";
-string $command = "import sys\nfrom importlib import reload\ntoolPath = '" + $scriptLocation + "scripts'\nsystemPath = sys.path\nif toolPath not in systemPath:\n    systemPath.append(toolPath)\ntry:\n    import numpy as np\nexcept ImportError:\n    import utils.setup as su\n    su.install_lib()\nimport ui.autosmear_main_ui as mainUI\nimport utils.ghosting_utils as fileCheck\nreload(mainUI)\nreload(fileCheck)\nfileCheck.clear_face_ID_data()\nmainUI.run()";
+string $command = "import sys\ntoolPath = '" + $scriptLocation + "autosmear_scripts'\nsystemPath = sys.path\nif toolPath not in systemPath:\n    systemPath.append(toolPath)\ntry:\n    import numpy as np\nexcept ImportError:\n    import autosmear_utils.setup as su\n    su.install_lib()\nimport autosmear_ui.autosmear_main_ui as mainUI\nimport autosmear_utils.ghosting_utils as fileCheck\nfileCheck.clear_face_ID_data()\nmainUI.run()";
 
 
 // Install button to current shelf
-string $icon = $scriptLocation + "icons/Autosmear_icon.png";
+string $icon = $scriptLocation + "autosmear_icons/Autosmear_icon.png";
 shelfButton
     -command $command
     -annotation $toolNaming
