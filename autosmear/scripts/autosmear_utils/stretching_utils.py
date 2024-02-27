@@ -5,6 +5,7 @@ import numpy as np
 import ast
 import maya.OpenMayaUI as omui
 import logging
+import math
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 
@@ -54,8 +55,8 @@ def get_values(
             smear_frame = calculate_interval_smear(start_frame,end_frame,interval)  #interval smear
             smear_subtype = "B"
         else:
-             smear_frame = calculate_custom_smear(custom_frame)     #custom smear
-             smear_subtype = "C"
+            smear_frame = calculate_custom_smear(custom_frame)     #custom smear
+            smear_subtype = "C"
 
         if camera_space == True:
             smear_frame = calculate_velocity_from_camera_space(start_frame, end_frame, [start_frame])
@@ -128,7 +129,7 @@ def stretch_attribute(smear_frames=[],end_frame = 1,master_squash_attribute="",r
     if multiplier<=1:
         max_stretch_value*= multiplier
     else:
-         multiplier = 1
+        multiplier = 1
     
     print(smear_frames)
     for smear_frame in smear_frames:
@@ -237,7 +238,7 @@ def calculate_velocity(start_frame=1,end_frame=1,ctrl_hierarchy=[]):
         
     for vi in range(len(velocity)): #a1-a0 find the difference    
         if vi == 0:
-             continue
+            continue
         a = velocity[vi] - velocity[vi-1]
         if a>max_a:
             max_a = a
@@ -307,7 +308,6 @@ def calculate_velocity_from_camera_space(start_frame=1,end_frame=1,ctrl_hierarch
     camera = find_current_camera()
     print(camera)
 
-    
     for frame_number in range(start_frame,end_frame):
         #todo finding position vector of the start_ctrl for each frame
         cmds.currentTime(frame_number)
@@ -348,13 +348,74 @@ def calculate_interval_smear(start_frame=1,end_frame=1,interval=1):
     return smear_frames
 
 def calculate_custom_smear(custom_frame=1):
-     """
+    """
     returns the custom_smear_frames
 
     Args:
         custom_frame (int): custom smear frame
     """  
-     return [custom_frame]
+    return [custom_frame]
+
+def prolonged_end_ctrl(smear_frame=1, prolonged_frame=1, ctrl_hierarchy=[]):
+    """
+    this function accepts existing smear frames, then creates a prolonged stretch. 
+
+    Args:
+        smear_frame (int): existing smear frame.
+        prolonged_frame (int): last frame of the stretching effect.
+        ctrl_hierarchy (lst): list of hierarical ctrls.
+    """
+
+    '''
+    CODE SNIPPED:
+    import importlib
+import sys
+toolPath = 'C:/Users/User/OneDrive/Documents/maya/2022/scripts/autosmear/autosmear_scripts'
+systemPath = sys.path
+
+if toolPath not in systemPath:
+    systemPath.append(toolPath)
+
+from autosmear_utils import stretching_utils as su
+importlib.reload(su)
+
+su.prolonged_end_ctrl(
+smear_frame = 50,
+prolonged_frame = 53, 
+ctrl_hierarchy = [
+'charizard_rig_v003:flame_01_ctrl',
+'charizard_rig_v003:flame_02_ctrl',
+'charizard_rig_v003:flame_03_ctrl',
+'charizard_rig_v003:flame_04_ctrl'])
+    '''
+
+    # todo find the main ctrl (start ctrl)
+    first_ctrl = cmds.listRelatives(ctrl_hierarchy[0], children=True)
+    last_ctrl = cmds.listRelatives(ctrl_hierarchy[-1], children=True)
+
+    #! determine end ctrl and eliminate
+    if len(first_ctrl) > 1:  # imply that first_ctrl is the main ctrl
+        end_ctrl = ctrl_hierarchy[-1]
+
+    elif len(last_ctrl) > 1:  # imply that last_ctrl is the main ctrl
+        end_ctrl = ctrl_hierarchy[0]
+
+    frame_range = prolonged_frame - smear_frame
+
+    # todo set keyframe to perform a prolonged stretch
+    for each_frame in range(frame_range+1):
+        cmds.currentTime(smear_frame + each_frame)
+        
+        if smear_frame + each_frame == smear_frame:
+            loc_pos = cmds.xform(end_ctrl, query=True,translation=True, worldSpace=True)
+            loc = cmds.spaceLocator(
+                name="{ctrlHie}_autoSmearTool_LOC".format(ctrlHie=end_ctrl))
+            cmds.xform(loc, translation=loc_pos, worldSpace=True)
+        
+        cmds.matchTransform(end_ctrl,loc,position = True)
+        cmds.setKeyframe(end_ctrl, breakdown=False,
+                        preserveCurveShape=False, hierarchy="None", controlPoints=False, shape=False)
+    cmds.delete(loc)
 
 def stretch_ctrl(start_frame=1,end_frame=1,start_ctrl="",smear_frames = [],ctrl_hierarchy = [],multiplier = 1.0,smear_subtype = ""):
     number_of_ctrl = len(ctrl_hierarchy)-1
