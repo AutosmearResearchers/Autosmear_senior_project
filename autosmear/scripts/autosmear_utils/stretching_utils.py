@@ -6,7 +6,7 @@ import ast
 import maya.OpenMayaUI as omui
 import logging
 import math
-from pprint import pprint
+
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 
@@ -43,7 +43,7 @@ def get_values(
     """
     
     #todo check if user choose based on attribute or controller
-    print(smear_option)
+    #print(smear_option)
     smear_subtype = ""
     if command_option == 1:
         #! using function to get the hierarchy of the ctrl
@@ -132,7 +132,7 @@ def stretch_attribute(smear_frames=[],end_frame = 1,master_squash_attribute="",r
     else:
         multiplier = 1
     
-    print(smear_frames)
+    #print(smear_frames)
     for smear_frame in smear_frames:
         #! keyframe the frame before smear_frame
         cmds.currentTime(smear_frame - 1)
@@ -255,7 +255,7 @@ def worldSpaceToScreenSpace(camera, worldPoint):
 
     # get the dagPath to the camera shape node to get the world inverse matrix
     sel_lst = om.MSelectionList()
-    print(camera)
+    #print(camera)
     sel_lst.add(camera)
     dagPath = om.MDagPath()
     sel_lst.getDagPath(0, dagPath)
@@ -307,7 +307,7 @@ def calculate_velocity_from_camera_space(start_frame=1,end_frame=1,ctrl_hierarch
     n = 0  # ? dynamic array index
     smear_frame = start_frame
     camera = find_current_camera()
-    print(camera)
+    #print(camera)
 
     for frame_number in range(start_frame,end_frame):
         #todo finding position vector of the start_ctrl for each frame
@@ -394,17 +394,20 @@ def prolonged_end_ctrl(smear_frame=1, prolonged_frame=1, ctrl_hierarchy=[]):
                         preserveCurveShape=False, hierarchy="None", controlPoints=False, shape=False)
     cmds.delete(loc)
 
-def stretch_ctrls_by_multiplier(start_ctrl = '',ctrl_hierarchy = [],multiplier = 1,smear_frame = 1):
+def stretch_ctrls_by_multiplier(start_ctrl = '',ctrl_hierarchy = [],multiplier = 1.0,smear_frame = 1):
     """
     this function accept start_ctrl and, ctrl_hierarchy, merge them then move the ctrl by its multiplier.
 
     Args:
-        loc_group(lst) : list of creates locators.
+        start_ctrl(str): name of the start ctrl (main ctrl).   
+        ctrl_hierarchy(lst): list of ctrls in the hierarchy EXCLUDING the start ctrl.
+        multiplier(float): value determining the change to be made in the stretching results.
+        smear_frame(int): frame that the stretch smear occurs.
     """
     #todo obtain required parameters for applying section formula 
     #! insert start_ctrl to the ctrl_hierarchy as its first element
     cmds.currentTime(smear_frame + 1)
-    print(f'smear_frame : {smear_frame+1}')
+    #print(f'smear_frame : {smear_frame+1}')
     ctrl_hierarchy.insert(0,start_ctrl)
     ctrl_ID = {}
     
@@ -430,7 +433,7 @@ def stretch_ctrls_by_multiplier(start_ctrl = '',ctrl_hierarchy = [],multiplier =
         y_coord = ((section[1]*coords['y'][0]) + (section[0]* coords['y'][1])) / (section[0] + section[1])
         z_coord = ((section[1]*coords['z'][0]) + (section[0]* coords['z'][1])) / (section[0] + section[1])
         
-        print(f'VECTOR {each_ctrl}: ({x_coord},{y_coord},{z_coord})')
+        #print(f'VECTOR {each_ctrl}: ({x_coord},{y_coord},{z_coord})')
         
         #todo applying section formula to obtain the coordinates
         cmds.xform(ctrl_hierarchy[each_ctrl_ID + 1],translation = [x_coord,y_coord,z_coord],worldSpace = True)
