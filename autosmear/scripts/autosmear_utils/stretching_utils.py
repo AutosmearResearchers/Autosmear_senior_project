@@ -10,7 +10,9 @@ import math
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 
+from importlib import reload
 from autosmear_utils import history_control
+reload(history_control)
 
 def get_values(
     start_frame=1,
@@ -63,7 +65,8 @@ def get_values(
             smear_frame = calculate_velocity_from_camera_space(start_frame, end_frame, [start_frame])
         
         #! using function to keyframe the stretch smear effect (by ctrl)
-        if history_control.check_unique(start_ctrl, smear_frame, ctrl_hierarchy, smear_subtype):
+        history_check = history_control.check_unique(start_ctrl, smear_frame, ctrl_hierarchy, smear_subtype)
+        if not history_control.check_unique(start_ctrl, smear_frame, ctrl_hierarchy, smear_subtype):
             stretch_ctrl(start_frame,end_frame,start_ctrl,smear_frame,ctrl_hierarchy,multiplier,smear_subtype)
         else:
             logger.warning("Existing smear: skip creating")
@@ -148,26 +151,6 @@ def stretch_attribute(smear_frames=[],end_frame = 1,master_squash_attribute="",r
         cmds.currentTime(end_frame)
         cmds.setAttr(attribute,original_stretch_value)
         cmds.setKeyframe(attribute,breakdown = False, preserveCurveShape = False, hierarchy = "None",controlPoints= False, shape = False)
-
-        order_num = 1
-        full_path = cmds.listRelatives(master_squash_attribute, ap=True)[0]
-        # full_path = full_path_list[0].split('|')[1]
-        last_history = cmds.listAttr(full_path, ud=True)
-
-        if last_history is not None:
-            if len(last_history) > 0:
-                for each_smear in last_history:
-                    if each_smear.split("_s")[0] == "stretching":
-                        smear_count_list.append(each_smear)
-
-                if len(smear_count_list) > 0:
-                    order_num = int((smear_count_list[-1]).split("_s")[1]) + 1
-
-        history_dict = "{frame}||{type}||{ctrl}".format(frame=smear_frame, type=smear_subtype, ctrl=master_squash_attribute)
-        attr_naming = "stretching_s{order}".format(order=order_num)
-
-        cmds.addAttr(full_path, ln=attr_naming, dt="string")
-        cmds.setAttr("{grp_path}.{attr_name}".format(grp_path=full_path,attr_name = attr_naming), history_dict, type="string", lock = True)
 
 def get_ctrl_hierarchy(start_ctrl = "",end_ctrl = ""):
     """
@@ -486,7 +469,7 @@ def stretch_ctrl(start_frame=1,end_frame=1,start_ctrl="",smear_frames = [],ctrl_
         if multiplier != 1.0:    
             stretch_ctrls_by_multiplier(start_ctrl,ctrl_hierarchy,multiplier,smear_frame)
 
-        #cmds.delete(loc_group)
+        cmds.delete(loc_group)
         locator_list = []
 
     #! create history dict and record history of smear

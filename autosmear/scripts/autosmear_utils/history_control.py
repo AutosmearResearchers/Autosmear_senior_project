@@ -40,7 +40,7 @@ def check_unique(main_handler, frame_info, ctrl_info, type_info):
     # check if the creation is unique
     used_frame = frame_info[0] + 1
     nailed_attr_list = None
-    checker = True
+    checker = False
     if main_handler not in ctrl_info:
         ctrl_info.insert(0, main_handler)
     full_path_list = cmds.listRelatives(main_handler, fullPath=True)
@@ -52,33 +52,52 @@ def check_unique(main_handler, frame_info, ctrl_info, type_info):
                 nailed_attr_list = (cmds.getAttr("{node}.{attr}".format(node=main_handler, attr=each))).split("||")
                 if  type_info == "C":
                     if nailed_attr_list[0] == str(used_frame-1) and nailed_attr_list[2] == "{}".format(ctrl_info):
-                        checker = False
+                        checker = each
                 else:
                     if nailed_attr_list[0] == str(used_frame) and nailed_attr_list[2] == "{}".format(ctrl_info):
-                        checker = False
-    print(checker, nailed_attr_list, used_frame, "{}".format(ctrl_info))
+                        checker = each
     return checker
+
+class HistoryChunkControl(object):
+    """
+    Combine a chain of commands into one undo.
+    Can be used in combination with the "with" statement.
+    
+    with UndoChunkContext():
+        # code
+    """
+    def __enter__(self):
+        cmds.undoInfo(openChunk=True)
+        
+    def __exit__(self, *exc_info):
+        cmds.undoInfo(closeChunk=True)
+
+def write_smear_version(stretching_components=[]):
+    """
+    stretching_components = [start_ctrl, smear_frame, ctrl_hierarchy, smear_subtype]
+    """
+    path = get_current_maya_file_path(False)
+    path = path[:path.rfind('.')]
+
+    # should be something like; "NC11_woman_test_ghosting_base_ghosting1_version.json"
+    full_path = '{path}_stretching_version.json'.format(path=path)
+
+    # if os.path.exists(full_path):
+    #     #! if file already exist
+    #     old_file = open(full_path, 'r')
+    #     SG_dict = json.load(old_file)
+    #     old_file.close()
+    # else:
+    #     #! if file does not exist
+    #     SG_dict = {}
+    
+    # ? overwrite the existing dict with the new dict
+    file = open(full_path, 'w')
 
 
 # def write_smear_version():
 #     raw_dag = cmds.ls(ghostingGrp,dag = True,long=True)
-#     path = get_current_maya_file_path(False)
-#     path = path[:path.rfind('.')]
 
-#     # should be something like; "NC11_woman_test_ghosting_base_ghosting1_version.json"
-#     full_path = '{path}_{}_{type_order}_version.json'.format(path=path)
-
-#     if os.path.exists(full_path):
-#         #! if file already exist
-#         old_file = open(full_path, 'r')
-#         SG_dict = json.load(old_file)
-#         old_file.close()
-#     else:
-#         #! if file does not exist
-#         SG_dict = {}
-    
-#     # ? overwrite the existing dict with the new dict
-#     file = open(full_path, 'w')
 
 def get_current_maya_file_path(full_path = False):
     '''

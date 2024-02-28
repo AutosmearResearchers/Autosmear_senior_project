@@ -7,7 +7,9 @@ import json
 import maya.OpenMaya as om
 import maya.OpenMayaUI as omui
 
+from importlib import reload
 from autosmear_utils import history_control
+reload(history_control)
 
 '''
 NOTE: for testing the NCrig paste this in the script editor
@@ -476,7 +478,8 @@ def duplicate_geometry(ghosting_object=''):
     '''
     
     #todo duplicate the entire geometry
-    new_name = '{ghost_name}__Autosmear_ghost_obj'.format(ghost_name=ghosting_object)
+    ghosting_object_rename = ghosting_object.replace(':', '_')
+    new_name = '{ghost_name}__Autosmear_ghost_obj'.format(ghost_name=ghosting_object_rename)
     duplicate_geo = cmds.duplicate(ghosting_object,name = new_name)
     cmds.parent(duplicate_geo,world=True)
     

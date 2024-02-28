@@ -6,8 +6,13 @@ import os
 import json
 import maya.OpenMaya as om
 import math
+import logging
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
 
+from importlib import reload
 from autosmear_utils import history_control
+reload(history_control)
 
 '''
 #PASTE THIS CODE IN THE MAYA SCRIPT EDITOR
@@ -375,6 +380,9 @@ def get_stretching_value(
 ):
     # todo get the ctrl data for stretching calculation
     ctrl_ID = get_blending_ctrl_data(sub_grp_lst)
+    if not ctrl_ID:
+        logger.error("No available object or group to create Blending. Check if they have been \'Set controller\'.")
+        return
 
     # todo calculate the stretch
     stretch_blending_ctrl(ctrl_ID)
@@ -396,8 +404,9 @@ def get_blending_ctrl_data(sub_grp_lst=[]):
     #! query the blending grp
     blend_grp_lst = []
     for sub_grp in sub_grp_lst:
-        blend_grp_lst.append([each for each in cmds.listRelatives(sub_grp)
-                              if '_blendingGrp_' in each][0])
+        blending_relatives = [each for each in cmds.listRelatives(sub_grp) if '_blendingGrp_' in each]
+        if blending_relatives:
+            blend_grp_lst.append(blending_relatives[0])
 
     #! from the blending_grp_lst, query the ctrl grp
     blending_ctrl_ID = {}
@@ -494,9 +503,9 @@ def tmp_building_func_component(parent_path="", main_ghosting_grp=[]):
     #! create history dict and record history of smear
     # order_num = 1
     # smear_count_list = []
-    print("main_ghosting_grp --> ", parent_path)
-    for member in main_ghosting_grp:
-        used_frame = int((cmds.keyframe(member, q=True))[1])
-        history_control.create_history_attr(
-            parent_path, "blending", used_frame, "", member
-        )
+    if main_ghosting_grp:
+        for member in main_ghosting_grp:
+            used_frame = int((cmds.keyframe(member, q=True))[1])
+            history_control.create_history_attr(
+                parent_path, "blending", used_frame, "", member
+            )
