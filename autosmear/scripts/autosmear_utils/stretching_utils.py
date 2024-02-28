@@ -6,6 +6,7 @@ import ast
 import maya.OpenMayaUI as omui
 import logging
 import math
+from pprint import pprint
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 
@@ -194,7 +195,7 @@ def get_ctrl_hierarchy(start_ctrl = "",end_ctrl = ""):
         if lstElement is end_ctrl:
             break
                 
-    return(ctrl_hierarchy)    
+    return(ctrl_hierarchy)
         
 def calculate_velocity(start_frame=1,end_frame=1,ctrl_hierarchy=[]):
     """
@@ -365,30 +366,6 @@ def prolonged_end_ctrl(smear_frame=1, prolonged_frame=1, ctrl_hierarchy=[]):
         prolonged_frame (int): last frame of the stretching effect.
         ctrl_hierarchy (lst): list of hierarical ctrls.
     """
-
-    '''
-    CODE SNIPPED:
-    import importlib
-import sys
-toolPath = 'C:/Users/User/OneDrive/Documents/maya/2022/scripts/autosmear/autosmear_scripts'
-systemPath = sys.path
-
-if toolPath not in systemPath:
-    systemPath.append(toolPath)
-
-from autosmear_utils import stretching_utils as su
-importlib.reload(su)
-
-su.prolonged_end_ctrl(
-smear_frame = 50,
-prolonged_frame = 53, 
-ctrl_hierarchy = [
-'charizard_rig_v003:flame_01_ctrl',
-'charizard_rig_v003:flame_02_ctrl',
-'charizard_rig_v003:flame_03_ctrl',
-'charizard_rig_v003:flame_04_ctrl'])
-    '''
-
     # todo find the main ctrl (start ctrl)
     first_ctrl = cmds.listRelatives(ctrl_hierarchy[0], children=True)
     last_ctrl = cmds.listRelatives(ctrl_hierarchy[-1], children=True)
@@ -417,11 +394,54 @@ ctrl_hierarchy = [
                         preserveCurveShape=False, hierarchy="None", controlPoints=False, shape=False)
     cmds.delete(loc)
 
+def stretch_ctrls_by_multiplier(start_ctrl = '',ctrl_hierarchy = [],multiplier = 1,smear_frame = 1):
+    """
+    this function accept start_ctrl and, ctrl_hierarchy, merge them then move the ctrl by its multiplier.
+
+    Args:
+        loc_group(lst) : list of creates locators.
+    """
+    #todo obtain required parameters for applying section formula 
+    #! insert start_ctrl to the ctrl_hierarchy as its first element
+    cmds.currentTime(smear_frame + 1)
+    print(f'smear_frame : {smear_frame+1}')
+    ctrl_hierarchy.insert(0,start_ctrl)
+    ctrl_ID = {}
+    
+    #! convert multiplier to fraction ratio
+    section = (multiplier).as_integer_ratio()
+
+    #! tranversing the ctrl hierarchy to apply section formula to each vector
+    for each_ctrl_ID, each_ctrl in enumerate(ctrl_hierarchy):
+        if each_ctrl == ctrl_hierarchy[-1]:
+            break
+        
+        #! obtaining all the required coordinates
+        coords = {
+            'x': [cmds.xform(ctrl_hierarchy[each_ctrl_ID], query=True, translation=True, worldSpace=True)[0], cmds.xform(ctrl_hierarchy[each_ctrl_ID + 1], query=True, translation=True, worldSpace=True)[0]],
+        
+            'y': [cmds.xform(ctrl_hierarchy[each_ctrl_ID], query=True, translation=True, worldSpace=True)[1], cmds.xform(ctrl_hierarchy[each_ctrl_ID + 1], query=True, translation=True, worldSpace=True)[1]],
+        
+            'z': [cmds.xform(ctrl_hierarchy[each_ctrl_ID], query=True, translation=True, worldSpace=True)[2], cmds.xform(ctrl_hierarchy[each_ctrl_ID + 1], query=True, translation=True, worldSpace=True)[2]],
+        }
+        
+        #todo get the partition coordinate via section formula
+        x_coord = ((section[1]*coords['x'][0]) + (section[0]*coords['x'][1])) / (section[0] + section[1])
+        y_coord = ((section[1]*coords['y'][0]) + (section[0]* coords['y'][1])) / (section[0] + section[1])
+        z_coord = ((section[1]*coords['z'][0]) + (section[0]* coords['z'][1])) / (section[0] + section[1])
+        
+        print(f'VECTOR {each_ctrl}: ({x_coord},{y_coord},{z_coord})')
+        
+        #todo applying section formula to obtain the coordinates
+        cmds.xform(ctrl_hierarchy[each_ctrl_ID + 1],translation = [x_coord,y_coord,z_coord],worldSpace = True)
+        cmds.setKeyframe(ctrl_hierarchy[each_ctrl_ID + 1], breakdown=False,preserveCurveShape=False, hierarchy="None", controlPoints=False, shape=False)
+
 def stretch_ctrl(start_frame=1,end_frame=1,start_ctrl="",smear_frames = [],ctrl_hierarchy = [],multiplier = 1.0,smear_subtype = ""):
     number_of_ctrl = len(ctrl_hierarchy)-1
     
     if ctrl_hierarchy[0] != start_ctrl:
         ctrl_hierarchy = ctrl_hierarchy[::-1]
+
     if start_ctrl in ctrl_hierarchy:
         ctrl_hierarchy.remove(start_ctrl)
     
@@ -458,7 +478,12 @@ def stretch_ctrl(start_frame=1,end_frame=1,start_ctrl="",smear_frames = [],ctrl_
     
         #todo group all the locators created after the iteration is complete
         loc_group = cmds.group(locator_list,name = "{ctrlHie}_{frame}_autoSmearTool_LOC_grp".format(frame=smear_frame,ctrlHie = ctrl_hierarchy[number]))
-        cmds.delete(loc_group)
+        
+        #todo if multiplier exist, stretch the ctrl correspond to the ctrl value
+        if multiplier != 1.0:    
+            stretch_ctrls_by_multiplier(start_ctrl,ctrl_hierarchy,multiplier,smear_frame)
+
+        #cmds.delete(loc_group)
         locator_list = []
 
     #! create history dict and record history of smear
